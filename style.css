@@ -85,10 +85,21 @@ h1 {
     font-size: 1em;
 }
 
-#common-letter-display {
-    text-align: center;
-    font-size: 1.2em;
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 20px;
+    font-size: 1.2em;
+    padding: 0 10px;
+}
+
+#common-letter-display {
+    text-align: left;
+}
+
+#timer-display {
+    font-weight: bold;
 }
 
 #common-letter {
@@ -99,6 +110,7 @@ h1 {
 #game-board {
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 10px;
     margin-bottom: 10px;
 }

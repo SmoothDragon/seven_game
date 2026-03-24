@@ -6,6 +6,17 @@ let wrongPositionLetters = Array(7).fill(''); // For each word
 let columnRedLetters = Array(7).fill(''); // For each column
 let guesses = [];
 let gameOver = false;
+let startTime;
+let timerInterval;
+
+function updateTimer() {
+    if (!startTime || gameOver) return;
+    const now = Date.now();
+    const diff = Math.floor((now - startTime) / 1000);
+    const m = String(Math.floor(diff / 60)).padStart(2, '0');
+    const s = String(diff % 60).padStart(2, '0');
+    document.getElementById('timer').textContent = `${m}:${s}`;
+}
 
 // Initialize game
 function initGame() {
@@ -73,6 +84,15 @@ function initGame() {
     // 3. Setup UI
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
+    
+    // Start Timer
+    clearInterval(timerInterval);
+    startTime = Date.now();
+    updateTimer();
+    timerInterval = setInterval(updateTimer, 1000);
+    
+    // Focus input
+    document.getElementById('guess-input').focus();
 }
 
 // Event listeners setup (only called once)
@@ -85,23 +105,44 @@ function setupEventListeners() {
     document.addEventListener('keydown', function(e) {
         if (gameOver) return;
         
-        // Ignore if user is typing in some other input field (though we only have one)
-        if (e.target.tagName === 'INPUT' && !e.target.readOnly) return;
-
         const input = document.getElementById('guess-input');
         
+        // Ignore if user is typing in some other input field
+        if (e.target.tagName === 'INPUT' && e.target.id !== 'guess-input') return;
+
         if (e.key === 'Enter') {
             e.preventDefault();
             handleGuess();
         } else if (e.key === 'Backspace') {
             e.preventDefault();
-            input.value = input.value.slice(0, -1);
+            if (input.selectionStart !== input.selectionEnd) {
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = input.value.slice(0, start) + input.value.slice(end);
+                input.setSelectionRange(start, start);
+            } else if (input.value.length > 0) {
+                input.value = input.value.slice(0, -1);
+            }
+        } else if (e.key === 'Delete') {
+            e.preventDefault();
+            if (input.selectionStart !== input.selectionEnd) {
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = input.value.slice(0, start) + input.value.slice(end);
+                input.setSelectionRange(start, start);
+            }
         } else if (/^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
-            if (input.value.length < 7) {
+            if (input.selectionStart !== input.selectionEnd) {
+                const start = input.selectionStart;
+                const end = input.selectionEnd;
+                input.value = input.value.slice(0, start) + e.key.toLowerCase() + input.value.slice(end);
+                input.setSelectionRange(start + 1, start + 1);
+            } else if (input.value.length < 7) {
                 input.value += e.key.toLowerCase();
             }
         }
+        input.focus();
     });
 
     // Virtual Keyboard Event Listeners
@@ -114,12 +155,25 @@ function setupEventListeners() {
             if (char === 'Enter') {
                 handleGuess();
             } else if (char === 'Backspace') {
-                input.value = input.value.slice(0, -1);
+                if (input.selectionStart !== input.selectionEnd) {
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    input.value = input.value.slice(0, start) + input.value.slice(end);
+                    input.setSelectionRange(start, start);
+                } else if (input.value.length > 0) {
+                    input.value = input.value.slice(0, -1);
+                }
             } else {
-                if (input.value.length < 7) {
+                if (input.selectionStart !== input.selectionEnd) {
+                    const start = input.selectionStart;
+                    const end = input.selectionEnd;
+                    input.value = input.value.slice(0, start) + char + input.value.slice(end);
+                    input.setSelectionRange(start + 1, start + 1);
+                } else if (input.value.length < 7) {
                     input.value += char;
                 }
             }
+            input.focus();
         });
     });
 }
@@ -215,24 +269,26 @@ function handleGuess() {
     const input = document.getElementById('guess-input');
     const guess = input.value.toLowerCase().trim();
 
+    const handleError = (msg) => {
+        showMessage(msg);
+        input.value = '';
+        input.focus();
+    };
+
     if (guess.length !== 7) {
-        showMessage('Guess must be exactly 7 letters.');
-        return;
+        return handleError('Guess must be exactly 7 letters.');
     }
 
     if (!WORDS.includes(guess)) {
-        showMessage('Not a valid word in the list.');
-        return;
+        return handleError('Not a valid word in the list.');
     }
 
     if (!guess.includes(commonLetter)) {
-        showMessage(`Word must contain the common letter: ${commonLetter.toUpperCase()}`);
-        return;
+        return handleError(`Word must contain the common letter: ${commonLetter.toUpperCase()}`);
     }
 
     if (guesses.includes(guess)) {
-        showMessage('You already guessed that word.');
-        return;
+        return handleError('You already guessed that word.');
     }
 
     guesses.push(guess);
@@ -341,6 +397,7 @@ function checkWinCondition() {
 
     if (allRevealed) {
         gameOver = true;
+        clearInterval(timerInterval);
         showMessage('Congratulations! You found all 7 words!');
         document.getElementById('guess-btn').disabled = true;
     }

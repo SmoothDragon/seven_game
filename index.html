@@ -22,9 +22,12 @@
                 <button id="new-game-btn">New Game</button>
             </div>
 
+        <div class="game-header">
             <div id="common-letter-display">Common Letter: <span id="common-letter"></span></div>
-            
-            <div id="game-board">
+            <div id="timer-display">Time: <span id="timer">00:00</span></div>
+        </div>
+        
+        <div id="game-board">
                 <!-- 7 rows for the 7 secret words -->
             </div>
             
@@ -39,10 +42,10 @@
                 <div class="col-feedback" id="col-6"></div>
             </div>
 
-            <div class="input-area">
-                <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" readonly>
-                <button id="guess-btn">Guess</button>
-            </div>
+        <div class="input-area">
+            <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" inputmode="none" autocomplete="off" spellcheck="false">
+            <button id="guess-btn">Guess</button>
+        </div>
             <div id="message"></div>
             
             <div id="keyboard">
