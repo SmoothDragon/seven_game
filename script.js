@@ -8,6 +8,8 @@ let guesses = [];
 let gameOver = false;
 let startTime;
 let timerInterval;
+let greenHintCount = 0;
+let yellowHintCount = 0;
 
 function updateTimer() {
     if (!startTime || gameOver) return;
@@ -85,6 +87,14 @@ function initGame() {
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
     
+    // Reset hints
+    greenHintCount = 0;
+    yellowHintCount = 0;
+    document.getElementById('green-hint-count').textContent = '0';
+    document.getElementById('yellow-hint-count').textContent = '0';
+    document.getElementById('green-hint-btn').disabled = false;
+    document.getElementById('yellow-hint-btn').disabled = false;
+
     // Reset Timer
     clearInterval(timerInterval);
     startTime = null;
@@ -110,6 +120,10 @@ function setupEventListeners() {
     document.getElementById('guess-btn').addEventListener('click', handleGuess);
     document.getElementById('new-game-btn').addEventListener('click', initGame);
     document.getElementById('difficulty').addEventListener('change', initGame);
+
+    // Hint buttons
+    document.getElementById('green-hint-btn').addEventListener('click', useGreenHint);
+    document.getElementById('yellow-hint-btn').addEventListener('click', useYellowHint);
 
     // Splash / Rules
     const splash = document.getElementById('splash-overlay');
@@ -255,6 +269,143 @@ async function fetchDefinition(word, tooltipElement) {
     } catch (e) {
         definitionsCache[word] = `<strong>${word.toUpperCase()}</strong>${rankHtml}<em>Definition not found in dictionary.</em>`;
         tooltipElement.innerHTML = definitionsCache[word];
+    }
+}
+
+function useGreenHint() {
+    if (gameOver) return;
+    startTimerIfNeeded();
+
+    // Collect all unrevealed positions
+    let unrevealed = [];
+    for (let i = 0; i < 7; i++) {
+        for (let j = 0; j < 7; j++) {
+            if (!revealedLetters[i][j]) {
+                unrevealed.push({ i, j });
+            }
+        }
+    }
+
+    if (unrevealed.length === 0) return;
+
+    // Pick a random unrevealed position
+    const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+    const letter = secretWords[pick.i][pick.j];
+
+    // Reveal this letter in ALL words where it appears in this position
+    for (let i = 0; i < 7; i++) {
+        if (secretWords[i][pick.j] === letter) {
+            revealedLetters[i][pick.j] = letter;
+        }
+    }
+
+    greenHintCount++;
+    document.getElementById('green-hint-count').textContent = greenHintCount;
+
+    // Recompute yellow hints for affected words
+    recomputeYellowLetters();
+    computeColumnRedLetters();
+    updateKeyboardColors();
+    renderBoard();
+    checkWinCondition();
+}
+
+function useYellowHint() {
+    if (gameOver) return;
+    startTimerIfNeeded();
+
+    // Collect all unique letters in the secret words
+    let allSecretLetters = new Set();
+    for (let word of secretWords) {
+        for (let char of word) {
+            allSecretLetters.add(char);
+        }
+    }
+
+    // Find letters that haven't been "discovered" yet (not in any yellow hint and not fully revealed)
+    let undiscoveredLetters = [];
+    for (let letter of allSecretLetters) {
+        let isKnown = false;
+
+        // Check if already shown as yellow on any row
+        for (let i = 0; i < 7; i++) {
+            if (wrongPositionLetters[i].includes(letter)) {
+                isKnown = true;
+                break;
+            }
+        }
+
+        // Check if already revealed green somewhere
+        if (!isKnown) {
+            for (let i = 0; i < 7; i++) {
+                if (revealedLetters[i].includes(letter)) {
+                    isKnown = true;
+                    break;
+                }
+            }
+        }
+
+        if (!isKnown) {
+            undiscoveredLetters.push(letter);
+        }
+    }
+
+    if (undiscoveredLetters.length === 0) {
+        showMessage('No new letters to reveal!');
+        return;
+    }
+
+    // Pick a random undiscovered letter
+    const letter = undiscoveredLetters[Math.floor(Math.random() * undiscoveredLetters.length)];
+
+    // Add it as a yellow hint for all words that contain it
+    for (let i = 0; i < 7; i++) {
+        if (secretWords[i].includes(letter) && !wrongPositionLetters[i].includes(letter)) {
+            wrongPositionLetters[i] += letter;
+            wrongPositionLetters[i] = wrongPositionLetters[i].split('').sort().join('');
+        }
+    }
+
+    yellowHintCount++;
+    document.getElementById('yellow-hint-count').textContent = yellowHintCount;
+
+    computeColumnRedLetters();
+    updateKeyboardColors();
+    renderBoard();
+}
+
+function recomputeYellowLetters() {
+    for (let i = 0; i < 7; i++) {
+        const secretWord = secretWords[i];
+        let filteredWrongPos = '';
+        for (let char of wrongPositionLetters[i]) {
+            let countInSecret = secretWord.split('').filter(c => c === char).length;
+            let countRevealed = revealedLetters[i].filter(c => c === char).length;
+            if (countRevealed < countInSecret) {
+                filteredWrongPos += char;
+            }
+        }
+        wrongPositionLetters[i] = filteredWrongPos;
+    }
+
+    // Global cleanup
+    for (let i = 0; i < 7; i++) {
+        let filteredWrongPos = '';
+        for (let char of wrongPositionLetters[i]) {
+            let isFullyRevealedGlobally = true;
+            for (let w = 0; w < 7; w++) {
+                let countInSecret = secretWords[w].split('').filter(c => c === char).length;
+                let countRevealed = revealedLetters[w].filter(c => c === char).length;
+                if (countRevealed < countInSecret) {
+                    isFullyRevealedGlobally = false;
+                    break;
+                }
+            }
+            if (!isFullyRevealedGlobally) {
+                filteredWrongPos += char;
+            }
+        }
+        wrongPositionLetters[i] = filteredWrongPos;
     }
 }
 

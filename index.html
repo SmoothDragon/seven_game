@@ -46,6 +46,10 @@
             <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off" spellcheck="false" inputmode="none" autofocus>
             <button id="guess-btn">Guess</button>
         </div>
+        <div class="hint-area">
+            <button id="green-hint-btn" class="hint-btn green-hint">Green Hint (<span id="green-hint-count">0</span>)</button>
+            <button id="yellow-hint-btn" class="hint-btn yellow-hint">Yellow Hint (<span id="yellow-hint-count">0</span>)</button>
+        </div>
             <div id="message"></div>
             
             <div id="keyboard">
@@ -104,7 +108,10 @@
                 <li><span class="red-text">Red</span> letters below a column indicate that that letter is not present in that column.</li>
                 <li>The keyboard blackens out letters that are known to be unnecessary to finish.</li>
                 <li>It is sometimes helpful to guess words to gather letter information.</li>
+                <li><span class="green-text">Green Hint</span>: Reveals a random unknown letter in its correct position across all words. Use when you are stuck!</li>
+                <li><span class="yellow-text">Yellow Hint</span>: Reveals an unguessed letter in yellow for all the words that contain it, without showing its position.</li>
             </ol>
+            <p style="font-size: 0.9em; color: #666;">Hint usage is tracked. Try to solve the puzzle with as few hints as possible!</p>
             <p class="splash-dismiss">Click anywhere to start!</p>
         </div>
     </div>
