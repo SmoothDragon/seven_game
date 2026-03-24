@@ -37,6 +37,7 @@ body {
     width: 250px;
     display: flex;
     flex-direction: column;
+    min-height: 480px;
 }
 
 .sidebar h3 {
@@ -55,12 +56,48 @@ body {
 }
 
 #guess-history li {
-    padding: 8px 5px;
+    padding: 6px 5px;
     border-bottom: 1px solid #eee;
     text-transform: uppercase;
     text-align: center;
     font-weight: bold;
     letter-spacing: 2px;
+    cursor: pointer;
+    position: relative;
+}
+
+#guess-history li:hover {
+    background-color: #f0f0f0;
+}
+
+#guess-history li .guess-tooltip {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #fefefe;
+    color: #333;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    z-index: 100;
+    width: 250px;
+    font-size: 0.8em;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: opacity 0.2s;
+    pointer-events: none;
+    margin-right: 10px;
+}
+
+#guess-history li:hover .guess-tooltip {
+    visibility: visible;
+    opacity: 1;
 }
 
 h1 {

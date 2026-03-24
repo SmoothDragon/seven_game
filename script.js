@@ -284,6 +284,13 @@ function handleGuess() {
     const historyList = document.getElementById('guess-history');
     const li = document.createElement('li');
     li.textContent = guess;
+    
+    const tooltip = document.createElement('div');
+    tooltip.className = 'guess-tooltip';
+    tooltip.innerHTML = '<em>Loading...</em>';
+    li.appendChild(tooltip);
+    fetchDefinition(guess, tooltip);
+    
     historyList.prepend(li);
 
     input.value = '';
@@ -359,38 +366,57 @@ function processGuess(guess) {
         wrongPositionLetters[i] = filteredWrongPos;
     }
 
-    // 3. Check column reds
+    // 3. Recompute column reds from scratch based on current state
+    computeColumnRedLetters();
+}
+
+function computeColumnRedLetters() {
+    columnRedLetters = Array(7).fill('');
+    
     for (let j = 0; j < 7; j++) {
-        const guessedLetter = guess[j];
-        
-        // If a letter occurs in no word (blacked out on keyboard), it should not be shown in red
-        let existsInAnyWord = false;
+        // Skip column if all 7 positions are revealed
+        let columnComplete = true;
         for (let i = 0; i < 7; i++) {
-            if (secretWords[i].includes(guessedLetter)) {
-                existsInAnyWord = true;
+            if (!revealedLetters[i][j]) {
+                columnComplete = false;
                 break;
             }
         }
-        
-        if (!existsInAnyWord) {
-            continue; // Skip adding to column reds
+        if (columnComplete) continue;
+
+        // Collect all letters guessed in this column position across all guesses
+        let guessedInColumn = new Set();
+        for (let guess of guesses) {
+            guessedInColumn.add(guess[j]);
         }
 
-        let isCorrectInAnyWord = false;
-        
-        for (let i = 0; i < 7; i++) {
-            if (secretWords[i][j] === guessedLetter) {
-                isCorrectInAnyWord = true;
-                break;
+        for (let letter of guessedInColumn) {
+            // Letter must appear as a yellow hint on at least one word row
+            let isYellowSomewhere = false;
+            for (let i = 0; i < 7; i++) {
+                if (wrongPositionLetters[i].includes(letter)) {
+                    isYellowSomewhere = true;
+                    break;
+                }
             }
-        }
+            if (!isYellowSomewhere) continue;
 
-        if (!isCorrectInAnyWord) {
-            if (!columnRedLetters[j].includes(guessedLetter)) {
-                columnRedLetters[j] += guessedLetter;
-                columnRedLetters[j] = columnRedLetters[j].split('').sort().join('');
+            // Letter must NOT be correct in this column for any word
+            let isCorrectInColumn = false;
+            for (let i = 0; i < 7; i++) {
+                if (secretWords[i][j] === letter) {
+                    isCorrectInColumn = true;
+                    break;
+                }
+            }
+            
+            if (!isCorrectInColumn) {
+                if (!columnRedLetters[j].includes(letter)) {
+                    columnRedLetters[j] += letter;
+                }
             }
         }
+        columnRedLetters[j] = columnRedLetters[j].split('').sort().join('');
     }
 }
 
