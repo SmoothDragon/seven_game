@@ -85,111 +85,64 @@ function initGame() {
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
     
-    // Start Timer
+    // Reset Timer
     clearInterval(timerInterval);
-    startTime = Date.now();
-    updateTimer();
-    timerInterval = setInterval(updateTimer, 1000);
+    startTime = null;
+    document.getElementById('timer').textContent = '00:00';
     
-    // Focus input
-    document.getElementById('guess-input').focus();
+    // Focus input after a brief delay to ensure DOM is ready
+    setTimeout(() => {
+        document.getElementById('guess-input').focus();
+    }, 100);
+}
+
+function startTimerIfNeeded() {
+    if (!startTime && !gameOver) {
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+    }
 }
 
 // Event listeners setup (only called once)
 function setupEventListeners() {
+    const input = document.getElementById('guess-input');
+    
     document.getElementById('guess-btn').addEventListener('click', handleGuess);
     document.getElementById('new-game-btn').addEventListener('click', initGame);
     document.getElementById('difficulty').addEventListener('change', initGame);
-    
-    // Prevent mobile keyboard from popping up, but keep cursor visible
-    const input = document.getElementById('guess-input');
-    input.addEventListener('focus', (e) => {
-        // Only prevent default if it's a touch event to avoid mobile keyboard
-        // We can't easily detect touch here reliably without breaking desktop,
-        // so we'll use a trick: make it readonly on touchstart, then remove it.
-    });
 
-    document.addEventListener('touchstart', function(e) {
-        if (e.target.id === 'guess-input') {
-            e.preventDefault(); // Prevent native keyboard
-            input.focus();      // Keep focus
-        }
-    }, { passive: false });
-
-    // Physical Keyboard Event Listener
-    document.addEventListener('keydown', function(e) {
-        if (gameOver) return;
-        
-        const input = document.getElementById('guess-input');
-        
-        // Ignore if user is typing in some other input field
-        if (e.target.tagName === 'INPUT' && e.target.id !== 'guess-input') return;
-
-        // If focus is lost, bring it back to input
-        if (document.activeElement !== input) {
-            input.focus();
-        }
-
+    // Let native input handle all typing (letters, backspace, delete, selection).
+    // We only intercept Enter for submission and refocus when needed.
+    input.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             handleGuess();
-        } else if (e.key === 'Backspace') {
-            e.preventDefault();
-            if (input.selectionStart !== input.selectionEnd) {
-                const start = input.selectionStart;
-                const end = input.selectionEnd;
-                input.value = input.value.slice(0, start) + input.value.slice(end);
-                input.setSelectionRange(start, start);
-            } else if (input.value.length > 0) {
-                input.value = input.value.slice(0, -1);
-            }
-        } else if (e.key === 'Delete') {
-            e.preventDefault();
-            if (input.selectionStart !== input.selectionEnd) {
-                const start = input.selectionStart;
-                const end = input.selectionEnd;
-                input.value = input.value.slice(0, start) + input.value.slice(end);
-                input.setSelectionRange(start, start);
-            }
-        } else if (/^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            if (input.selectionStart !== input.selectionEnd) {
-                const start = input.selectionStart;
-                const end = input.selectionEnd;
-                input.value = input.value.slice(0, start) + e.key.toLowerCase() + input.value.slice(end);
-                input.setSelectionRange(start + 1, start + 1);
-            } else if (input.value.length < 7) {
-                input.value += e.key.toLowerCase();
-            }
         }
-        input.focus();
+    });
+
+    // If user presses a key while input isn't focused, redirect focus
+    document.addEventListener('keydown', function(e) {
+        if (gameOver) return;
+        if (document.activeElement !== input && /^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            input.focus();
+        }
     });
 
     // Virtual Keyboard Event Listeners
     document.querySelectorAll('.key').forEach(key => {
-        key.addEventListener('click', function() {
+        key.addEventListener('click', function(e) {
+            e.preventDefault();
             if (gameOver) return;
             const char = this.getAttribute('data-key');
-            const input = document.getElementById('guess-input');
             
             if (char === 'Enter') {
                 handleGuess();
             } else if (char === 'Backspace') {
-                if (input.selectionStart !== input.selectionEnd) {
-                    const start = input.selectionStart;
-                    const end = input.selectionEnd;
-                    input.value = input.value.slice(0, start) + input.value.slice(end);
-                    input.setSelectionRange(start, start);
-                } else if (input.value.length > 0) {
+                if (input.value.length > 0) {
                     input.value = input.value.slice(0, -1);
                 }
             } else {
-                if (input.selectionStart !== input.selectionEnd) {
-                    const start = input.selectionStart;
-                    const end = input.selectionEnd;
-                    input.value = input.value.slice(0, start) + char + input.value.slice(end);
-                    input.setSelectionRange(start + 1, start + 1);
-                } else if (input.value.length < 7) {
+                if (input.value.length < 7) {
                     input.value += char;
                 }
             }
@@ -311,6 +264,8 @@ function handleGuess() {
         return handleError('You already guessed that word.');
     }
 
+    startTimerIfNeeded();
+    
     guesses.push(guess);
     processGuess(guess);
     updateKeyboardColors();
@@ -324,6 +279,7 @@ function handleGuess() {
     input.value = '';
     renderBoard();
     checkWinCondition();
+    input.focus();
 }
 
 function processGuess(guess) {
