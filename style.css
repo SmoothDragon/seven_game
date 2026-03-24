@@ -2,9 +2,19 @@ body {
     font-family: Arial, sans-serif;
     display: flex;
     justify-content: center;
+    align-items: flex-start;
     background-color: #f0f0f0;
     margin: 0;
     padding: 20px;
+}
+
+.main-wrapper {
+    display: flex;
+    gap: 20px;
+    max-width: 900px;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
 .container {
@@ -14,6 +24,43 @@ body {
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     max-width: 600px;
     width: 100%;
+    flex: 1;
+    min-width: 300px;
+}
+
+.sidebar {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    width: 250px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar h3 {
+    margin-top: 0;
+    text-align: center;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 10px;
+}
+
+#guess-history {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+#guess-history li {
+    padding: 8px 5px;
+    border-bottom: 1px solid #eee;
+    text-transform: uppercase;
+    text-align: center;
+    font-weight: bold;
+    letter-spacing: 2px;
 }
 
 h1 {
@@ -216,6 +263,69 @@ button:hover {
 .key.yellow {
     background-color: #c9b458;
     color: white;
+}
+
+/* Clickable completed words */
+.word-row.completed {
+    cursor: pointer;
+    transition: transform 0.1s ease;
+}
+
+.word-row.completed:hover {
+    transform: scale(1.02);
+}
+
+/* Modal Styles */
+.modal {
+    display: none; 
+    position: fixed; 
+    z-index: 1000; 
+    left: 0;
+    top: 0;
+    width: 100%; 
+    height: 100%; 
+    background-color: rgba(0,0,0,0.5); 
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto; 
+    padding: 20px;
+    border: 1px solid #888;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 400px;
+    position: relative;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.close-btn {
+    color: #aaa;
+    position: absolute;
+    right: 15px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-btn:hover,
+.close-btn:focus {
+    color: black;
+    text-decoration: none;
+}
+
+#def-title {
+    margin-top: 0;
+    text-transform: uppercase;
+    color: #0056b3;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+#def-text {
+    margin-top: 15px;
+    line-height: 1.5;
 }
 
 .history {

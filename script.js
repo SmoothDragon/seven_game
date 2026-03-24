@@ -122,6 +122,20 @@ function setupEventListeners() {
             }
         });
     });
+
+    // Modal close listeners
+    const modal = document.getElementById('def-modal');
+    const closeBtn = document.getElementById('close-modal');
+    
+    closeBtn.onclick = function() {
+        modal.style.display = "none";
+    }
+    
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = "none";
+        }
+    }
 }
 
 function renderBoard() {
@@ -132,6 +146,8 @@ function renderBoard() {
         const row = document.createElement('div');
         row.className = 'word-row';
         
+        let isCompleted = true;
+
         // Letter boxes
         for (let j = 0; j < 7; j++) {
             const box = document.createElement('div');
@@ -139,8 +155,16 @@ function renderBoard() {
             if (revealedLetters[i][j]) {
                 box.textContent = revealedLetters[i][j];
                 box.classList.add('correct');
+            } else {
+                isCompleted = false;
             }
             row.appendChild(box);
+        }
+
+        if (isCompleted) {
+            row.classList.add('completed');
+            row.title = "Click to view definition";
+            row.onclick = () => showDefinition(secretWords[i]);
         }
 
         // Wrong position feedback
@@ -164,6 +188,35 @@ function showMessage(msg) {
     setTimeout(() => {
         document.getElementById('message').textContent = '';
     }, 3000);
+}
+
+async function showDefinition(word) {
+    const modal = document.getElementById('def-modal');
+    const title = document.getElementById('def-title');
+    const text = document.getElementById('def-text');
+    
+    title.textContent = word;
+    text.innerHTML = "<em>Loading definition...</em>";
+    modal.style.display = "block";
+
+    try {
+        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
+        if (!response.ok) throw new Error('Definition not found');
+        const data = await response.json();
+        
+        let definitionsHtml = '';
+        data[0].meanings.forEach(meaning => {
+            definitionsHtml += `<strong>${meaning.partOfSpeech}</strong><ul>`;
+            meaning.definitions.slice(0, 2).forEach(def => {
+                definitionsHtml += `<li>${def.definition}</li>`;
+            });
+            definitionsHtml += `</ul>`;
+        });
+        
+        text.innerHTML = definitionsHtml;
+    } catch (e) {
+        text.innerHTML = "<em>Definition not found in dictionary.</em>";
+    }
 }
 
 function handleGuess() {
