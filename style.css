@@ -178,12 +178,12 @@ h1 {
     justify-items: center;
     color: #d9534f;
     font-weight: bold;
-    font-size: 0.85em;
+    font-size: 0.75em; /* Reduced from 0.85em */
     text-transform: uppercase;
     gap: 0;
     background-color: #fde8e8;
     border-radius: 4px;
-    padding: 2px;
+    padding: 2px 1px; /* Slightly reduced horizontal padding */
 }
 
 .col-feedback:empty {
@@ -193,7 +193,8 @@ h1 {
 
 .col-feedback span {
     text-align: center;
-    line-height: 1.4;
+    line-height: 1.2; /* Slightly tighter line height */
+    letter-spacing: -0.5px; /* Pull letters slightly closer together */
 }
 
 .input-area {
