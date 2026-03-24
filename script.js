@@ -211,9 +211,14 @@ function showMessage(msg) {
 let definitionsCache = {};
 
 async function fetchDefinition(word, tooltipElement) {
-    // Get rank of the word (1-indexed)
-    const rank = WORDS.indexOf(word) + 1;
-    const rankText = rank > 0 ? ` (Rank: ${rank.toLocaleString()} / ${WORDS.length.toLocaleString()})` : '';
+    const wordIndex = WORDS.indexOf(word);
+    const usageRank = wordIndex + 1;
+    const scrabbleRank = SCRABBLE_RANKS[wordIndex];
+    const total = WORDS.length.toLocaleString();
+
+    const rankHtml = `<div style="font-size:0.85em; color:#666; margin:4px 0;">` +
+        `Usage: #${usageRank.toLocaleString()} / ${total}<br>` +
+        `Scrabble: #${scrabbleRank.toLocaleString()} / ${total}</div>`;
 
     if (definitionsCache[word]) {
         tooltipElement.innerHTML = definitionsCache[word];
@@ -225,9 +230,9 @@ async function fetchDefinition(word, tooltipElement) {
         if (!response.ok) throw new Error('Not found');
         const data = await response.json();
         
-        let definitionsHtml = `<strong>${word.toUpperCase()}</strong><span style="font-size:0.85em; color:#666;">${rankText}</span>`;
+        let definitionsHtml = `<strong>${word.toUpperCase()}</strong>${rankHtml}`;
         data[0].meanings.forEach(meaning => {
-            definitionsHtml += `<br><em>${meaning.partOfSpeech}</em><ul>`;
+            definitionsHtml += `<em>${meaning.partOfSpeech}</em><ul>`;
             meaning.definitions.slice(0, 2).forEach(def => {
                 definitionsHtml += `<li>${def.definition}</li>`;
             });
@@ -237,7 +242,7 @@ async function fetchDefinition(word, tooltipElement) {
         definitionsCache[word] = definitionsHtml;
         tooltipElement.innerHTML = definitionsHtml;
     } catch (e) {
-        definitionsCache[word] = `<strong>${word.toUpperCase()}</strong><span style="font-size:0.85em; color:#666;">${rankText}</span><br><em>Definition not found in dictionary.</em>`;
+        definitionsCache[word] = `<strong>${word.toUpperCase()}</strong>${rankHtml}<em>Definition not found in dictionary.</em>`;
         tooltipElement.innerHTML = definitionsCache[word];
     }
 }
