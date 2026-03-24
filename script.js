@@ -122,20 +122,6 @@ function setupEventListeners() {
             }
         });
     });
-
-    // Modal close listeners
-    const modal = document.getElementById('def-modal');
-    const closeBtn = document.getElementById('close-modal');
-    
-    closeBtn.onclick = function() {
-        modal.style.display = "none";
-    }
-    
-    window.onclick = function(event) {
-        if (event.target == modal) {
-            modal.style.display = "none";
-        }
-    }
 }
 
 function renderBoard() {
@@ -163,14 +149,19 @@ function renderBoard() {
 
         if (isCompleted) {
             row.classList.add('completed');
-            row.title = "Click to view definition";
-            row.onclick = () => showDefinition(secretWords[i]);
+            
+            const tooltip = document.createElement('div');
+            tooltip.className = 'def-tooltip';
+            tooltip.innerHTML = "<em>Loading definition...</em>";
+            row.appendChild(tooltip);
+            
+            fetchDefinition(secretWords[i], tooltip);
         }
 
         // Wrong position feedback
         const feedback = document.createElement('div');
         feedback.className = 'wrong-position-feedback';
-        feedback.textContent = wrongPositionLetters[i];
+        feedback.innerHTML = wrongPositionLetters[i].split('').map(c => `<span>${c}</span>`).join('');
         row.appendChild(feedback);
 
         board.appendChild(row);
@@ -179,7 +170,7 @@ function renderBoard() {
     // Render column red letters
     for (let j = 0; j < 7; j++) {
         const colFeedback = document.getElementById(`col-${j}`);
-        colFeedback.innerHTML = columnRedLetters[j].split('').join('<br>');
+        colFeedback.innerHTML = columnRedLetters[j].split('').map(c => `<span>${c}</span>`).join('');
     }
 }
 
@@ -190,32 +181,32 @@ function showMessage(msg) {
     }, 3000);
 }
 
-async function showDefinition(word) {
-    const modal = document.getElementById('def-modal');
-    const title = document.getElementById('def-title');
-    const text = document.getElementById('def-text');
-    
-    title.textContent = word;
-    text.innerHTML = "<em>Loading definition...</em>";
-    modal.style.display = "block";
+let definitionsCache = {};
 
+async function fetchDefinition(word, tooltipElement) {
+    if (definitionsCache[word]) {
+        tooltipElement.innerHTML = definitionsCache[word];
+        return;
+    }
     try {
         const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
-        if (!response.ok) throw new Error('Definition not found');
+        if (!response.ok) throw new Error('Not found');
         const data = await response.json();
         
-        let definitionsHtml = '';
+        let definitionsHtml = `<strong>${word.toUpperCase()}</strong>`;
         data[0].meanings.forEach(meaning => {
-            definitionsHtml += `<strong>${meaning.partOfSpeech}</strong><ul>`;
+            definitionsHtml += `<br><em>${meaning.partOfSpeech}</em><ul>`;
             meaning.definitions.slice(0, 2).forEach(def => {
                 definitionsHtml += `<li>${def.definition}</li>`;
             });
             definitionsHtml += `</ul>`;
         });
         
-        text.innerHTML = definitionsHtml;
+        definitionsCache[word] = definitionsHtml;
+        tooltipElement.innerHTML = definitionsHtml;
     } catch (e) {
-        text.innerHTML = "<em>Definition not found in dictionary.</em>";
+        definitionsCache[word] = `<strong>${word.toUpperCase()}</strong><br><em>Definition not found in dictionary.</em>`;
+        tooltipElement.innerHTML = definitionsCache[word];
     }
 }
 
