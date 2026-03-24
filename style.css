@@ -38,6 +38,7 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 480px;
+    overflow: visible;
 }
 
 .sidebar h3 {
@@ -51,7 +52,7 @@ body {
     list-style: none;
     padding: 0;
     margin: 0;
-    overflow-y: auto;
+    overflow-y: visible;
     flex: 1;
 }
 
