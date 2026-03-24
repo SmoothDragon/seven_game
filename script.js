@@ -1,15 +1,46 @@
 // Global state
 let secretWords = [];
 let commonLetter = '';
-let revealedLetters = Array(7).fill(null).map(() => Array(7).fill('')); // 7 words, 7 letters
-let wrongPositionLetters = Array(7).fill(''); // For each word
-let columnRedLetters = Array(7).fill(''); // For each column
+let revealedLetters = Array(7).fill(null).map(() => Array(7).fill(''));
+let wrongPositionLetters = Array(7).fill('');
+let columnRedLetters = Array(7).fill('');
 let guesses = [];
 let gameOver = false;
 let startTime;
 let timerInterval;
 let greenHintCount = 0;
 let yellowHintCount = 0;
+let gameMode = 'daily'; // 'daily' or 'practice'
+let dailySubmitted = false;
+
+// --- Seeded RNG (mulberry32) ---
+
+function mulberry32(seed) {
+    return function() {
+        seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+        let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+
+function getDailySeed() {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    let hash = 0;
+    for (let i = 0; i < dateStr.length; i++) {
+        hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+}
+
+function getTodayString() {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+}
+
+// --- Timer ---
 
 function updateTimer() {
     if (!startTime || gameOver) return;
@@ -20,24 +51,124 @@ function updateTimer() {
     document.getElementById('timer').textContent = `${m}:${s}`;
 }
 
-// Initialize game
-function initGame() {
-    // Reset state
+function startTimerIfNeeded() {
+    if (!startTime && !gameOver) {
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+    }
+}
+
+function getElapsedSeconds() {
+    if (!startTime) return 0;
+    return Math.floor((Date.now() - startTime) / 1000);
+}
+
+// --- Mode Switching ---
+
+function switchMode(mode) {
+    gameMode = mode;
+    
+    document.getElementById('mode-daily').classList.toggle('active', mode === 'daily');
+    document.getElementById('mode-practice').classList.toggle('active', mode === 'practice');
+    
+    // Show/hide controls based on mode
+    document.getElementById('controls').style.display = mode === 'practice' ? 'flex' : 'none';
+    
+    // Show/hide sidebars
+    document.getElementById('sidebar-history').style.display = mode === 'practice' ? 'flex' : 'none';
+    document.getElementById('sidebar-scoreboard').style.display = mode === 'daily' ? 'flex' : 'none';
+
+    if (mode === 'daily') {
+        initDailyGame();
+    } else {
+        initGame();
+    }
+}
+
+// --- Game Initialization ---
+
+function resetGameState() {
     gameOver = false;
     guesses = [];
     revealedLetters = Array(7).fill(null).map(() => Array(7).fill(''));
     wrongPositionLetters = Array(7).fill('');
     columnRedLetters = Array(7).fill('');
+    dailySubmitted = false;
     document.getElementById('guess-input').value = '';
     document.getElementById('guess-history').innerHTML = '';
+    document.getElementById('daily-guess-history').innerHTML = '';
     document.getElementById('guess-btn').disabled = false;
     
-    // Reset keyboard colors
     document.querySelectorAll('.key').forEach(key => {
         key.classList.remove('black', 'green', 'yellow');
     });
 
-    // Determine word list based on difficulty
+    greenHintCount = 0;
+    yellowHintCount = 0;
+    document.getElementById('green-hint-count').textContent = '0';
+    document.getElementById('yellow-hint-count').textContent = '0';
+    document.getElementById('green-hint-btn').disabled = false;
+    document.getElementById('yellow-hint-btn').disabled = false;
+
+    clearInterval(timerInterval);
+    startTime = null;
+    document.getElementById('timer').textContent = '00:00';
+}
+
+function pickWordsWithRng(rng, wordList) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    let candidateWords = [];
+    
+    let indices = Array.from({length: 26}, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    for (let idx of indices) {
+        const letter = alphabet[idx];
+        candidateWords = wordList.filter(w => w.includes(letter));
+        if (candidateWords.length >= 50) {
+            commonLetter = letter;
+            break;
+        }
+    }
+
+    secretWords = [];
+    let tempCandidates = [...candidateWords];
+    for (let i = 0; i < 7; i++) {
+        const randomIndex = Math.floor(rng() * tempCandidates.length);
+        secretWords.push(tempCandidates[randomIndex]);
+        tempCandidates.splice(randomIndex, 1);
+    }
+}
+
+function initDailyGame() {
+    resetGameState();
+    
+    const todayStr = getTodayString();
+    dailySubmitted = localStorage.getItem(`daily_submitted_${todayStr}`) === 'true';
+    
+    const seed = getDailySeed();
+    const rng = mulberry32(seed);
+    const beginnerList = WORDS.slice(0, 5000);
+    
+    pickWordsWithRng(rng, beginnerList);
+
+    console.log("Daily words:", secretWords);
+
+    document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
+    renderBoard();
+    fetchLeaderboard();
+    
+    setTimeout(() => {
+        document.getElementById('guess-input').focus();
+    }, 100);
+}
+
+function initGame() {
+    resetGameState();
+
     const difficulty = document.getElementById('difficulty').value;
     let currentWordList = [];
     if (difficulty === 'beginner') {
@@ -48,17 +179,13 @@ function initGame() {
         currentWordList = WORDS;
     }
 
-    // 1. Pick a random common letter that has enough words
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     let validLetterFound = false;
     let candidateWords = [];
-    
-    // Shuffle alphabet to pick randomly
     let shuffledAlphabet = alphabet.split('').sort(() => 0.5 - Math.random());
     
     for (let letter of shuffledAlphabet) {
         candidateWords = currentWordList.filter(w => w.includes(letter));
-        // If the number of available words for a given letter drops below 50, ignore that letter
         if (candidateWords.length >= 50) {
             commonLetter = letter;
             validLetterFound = true;
@@ -67,12 +194,10 @@ function initGame() {
     }
 
     if (!validLetterFound) {
-        // Fallback just in case (shouldn't happen with these list sizes)
         commonLetter = 'e';
         candidateWords = currentWordList.filter(w => w.includes('e'));
     }
 
-    // 2. Pick 7 random words with this common letter
     secretWords = [];
     let tempCandidates = [...candidateWords];
     for (let i = 0; i < 7; i++) {
@@ -81,39 +206,18 @@ function initGame() {
         tempCandidates.splice(randomIndex, 1);
     }
 
-    console.log("Secret words:", secretWords); // For debugging
+    console.log("Secret words:", secretWords);
 
-    // 3. Setup UI
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
     
-    // Reset hints
-    greenHintCount = 0;
-    yellowHintCount = 0;
-    document.getElementById('green-hint-count').textContent = '0';
-    document.getElementById('yellow-hint-count').textContent = '0';
-    document.getElementById('green-hint-btn').disabled = false;
-    document.getElementById('yellow-hint-btn').disabled = false;
-
-    // Reset Timer
-    clearInterval(timerInterval);
-    startTime = null;
-    document.getElementById('timer').textContent = '00:00';
-    
-    // Focus input after a brief delay to ensure DOM is ready
     setTimeout(() => {
         document.getElementById('guess-input').focus();
     }, 100);
 }
 
-function startTimerIfNeeded() {
-    if (!startTime && !gameOver) {
-        startTime = Date.now();
-        timerInterval = setInterval(updateTimer, 1000);
-    }
-}
+// --- Event Listeners ---
 
-// Event listeners setup (only called once)
 function setupEventListeners() {
     const input = document.getElementById('guess-input');
     
@@ -121,9 +225,12 @@ function setupEventListeners() {
     document.getElementById('new-game-btn').addEventListener('click', initGame);
     document.getElementById('difficulty').addEventListener('change', initGame);
 
-    // Hint buttons
     document.getElementById('green-hint-btn').addEventListener('click', useGreenHint);
     document.getElementById('yellow-hint-btn').addEventListener('click', useYellowHint);
+
+    // Mode toggle
+    document.getElementById('mode-daily').addEventListener('click', () => switchMode('daily'));
+    document.getElementById('mode-practice').addEventListener('click', () => switchMode('practice'));
 
     // Splash / Rules
     const splash = document.getElementById('splash-overlay');
@@ -136,8 +243,15 @@ function setupEventListeners() {
         splash.classList.remove('hidden');
     });
 
-    // Let native input handle all typing (letters, backspace, delete, selection).
-    // We only intercept Enter for submission and refocus when needed.
+    // Nickname modal
+    document.getElementById('nickname-save-btn').addEventListener('click', saveNickname);
+    document.getElementById('nickname-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            saveNickname();
+        }
+    });
+
     input.addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -145,7 +259,6 @@ function setupEventListeners() {
         }
     });
 
-    // If user presses a key while input isn't focused, redirect focus
     document.addEventListener('keydown', function(e) {
         if (gameOver) return;
         if (document.activeElement !== input && /^[a-zA-Z]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -153,7 +266,6 @@ function setupEventListeners() {
         }
     });
 
-    // Virtual Keyboard Event Listeners
     document.querySelectorAll('.key').forEach(key => {
         key.addEventListener('click', function(e) {
             e.preventDefault();
@@ -176,6 +288,8 @@ function setupEventListeners() {
     });
 }
 
+// --- Board Rendering ---
+
 function renderBoard() {
     const board = document.getElementById('game-board');
     board.innerHTML = '';
@@ -186,7 +300,6 @@ function renderBoard() {
         
         let isCompleted = true;
 
-        // Letter boxes
         for (let j = 0; j < 7; j++) {
             const box = document.createElement('div');
             box.className = 'letter-box';
@@ -201,16 +314,13 @@ function renderBoard() {
 
         if (isCompleted) {
             row.classList.add('completed');
-            
             const tooltip = document.createElement('div');
             tooltip.className = 'def-tooltip';
             tooltip.innerHTML = "<em>Loading definition...</em>";
             row.appendChild(tooltip);
-            
             fetchDefinition(secretWords[i], tooltip);
         }
 
-        // Wrong position feedback
         const feedback = document.createElement('div');
         feedback.className = 'wrong-position-feedback';
         feedback.innerHTML = wrongPositionLetters[i].split('').map(c => `<span>${c}</span>`).join('');
@@ -219,12 +329,13 @@ function renderBoard() {
         board.appendChild(row);
     }
 
-    // Render column red letters
     for (let j = 0; j < 7; j++) {
         const colFeedback = document.getElementById(`col-${j}`);
         colFeedback.innerHTML = columnRedLetters[j].split('').map(c => `<span>${c}</span>`).join('');
     }
 }
+
+// --- Messages ---
 
 function showMessage(msg) {
     document.getElementById('message').textContent = msg;
@@ -232,6 +343,8 @@ function showMessage(msg) {
         document.getElementById('message').textContent = '';
     }, 3000);
 }
+
+// --- Definitions ---
 
 let definitionsCache = {};
 
@@ -272,11 +385,12 @@ async function fetchDefinition(word, tooltipElement) {
     }
 }
 
+// --- Hints ---
+
 function useGreenHint() {
     if (gameOver) return;
     startTimerIfNeeded();
 
-    // Collect all unrevealed positions
     let unrevealed = [];
     for (let i = 0; i < 7; i++) {
         for (let j = 0; j < 7; j++) {
@@ -288,11 +402,9 @@ function useGreenHint() {
 
     if (unrevealed.length === 0) return;
 
-    // Pick a random unrevealed position
     const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
     const letter = secretWords[pick.i][pick.j];
 
-    // Reveal this letter in ALL words where it appears in this position
     for (let i = 0; i < 7; i++) {
         if (secretWords[i][pick.j] === letter) {
             revealedLetters[i][pick.j] = letter;
@@ -302,7 +414,6 @@ function useGreenHint() {
     greenHintCount++;
     document.getElementById('green-hint-count').textContent = greenHintCount;
 
-    // Recompute yellow hints for affected words
     recomputeYellowLetters();
     computeColumnRedLetters();
     updateKeyboardColors();
@@ -314,7 +425,6 @@ function useYellowHint() {
     if (gameOver) return;
     startTimerIfNeeded();
 
-    // Collect all unique letters in the secret words
     let allSecretLetters = new Set();
     for (let word of secretWords) {
         for (let char of word) {
@@ -322,12 +432,10 @@ function useYellowHint() {
         }
     }
 
-    // Find letters that haven't been "discovered" yet (not in any yellow hint and not fully revealed)
     let undiscoveredLetters = [];
     for (let letter of allSecretLetters) {
         let isKnown = false;
 
-        // Check if already shown as yellow on any row
         for (let i = 0; i < 7; i++) {
             if (wrongPositionLetters[i].includes(letter)) {
                 isKnown = true;
@@ -335,7 +443,6 @@ function useYellowHint() {
             }
         }
 
-        // Check if already revealed green somewhere
         if (!isKnown) {
             for (let i = 0; i < 7; i++) {
                 if (revealedLetters[i].includes(letter)) {
@@ -355,10 +462,8 @@ function useYellowHint() {
         return;
     }
 
-    // Pick a random undiscovered letter
     const letter = undiscoveredLetters[Math.floor(Math.random() * undiscoveredLetters.length)];
 
-    // Add it as a yellow hint for all words that contain it
     for (let i = 0; i < 7; i++) {
         if (secretWords[i].includes(letter) && !wrongPositionLetters[i].includes(letter)) {
             wrongPositionLetters[i] += letter;
@@ -388,7 +493,6 @@ function recomputeYellowLetters() {
         wrongPositionLetters[i] = filteredWrongPos;
     }
 
-    // Global cleanup
     for (let i = 0; i < 7; i++) {
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
@@ -408,6 +512,8 @@ function recomputeYellowLetters() {
         wrongPositionLetters[i] = filteredWrongPos;
     }
 }
+
+// --- Guess Handling ---
 
 function handleGuess() {
     if (gameOver) return;
@@ -442,8 +548,8 @@ function handleGuess() {
     processGuess(guess);
     updateKeyboardColors();
     
-    // Update history
-    const historyList = document.getElementById('guess-history');
+    const historyId = gameMode === 'daily' ? 'daily-guess-history' : 'guess-history';
+    const historyList = document.getElementById(historyId);
     const li = document.createElement('li');
     li.textContent = guess;
     
@@ -462,7 +568,6 @@ function handleGuess() {
 }
 
 function processGuess(guess) {
-    // 1. Check greens (correct position)
     for (let i = 0; i < 7; i++) {
         const secretWord = secretWords[i];
         for (let j = 0; j < 7; j++) {
@@ -472,11 +577,9 @@ function processGuess(guess) {
         }
     }
 
-    // 2. Check wrong positions (yellow/right side)
     for (let i = 0; i < 7; i++) {
         const secretWord = secretWords[i];
         
-        // Add any guessed letter that is in the secret word
         let uniqueGuessedLetters = [...new Set(guess.split(''))];
         for (let char of uniqueGuessedLetters) {
             if (secretWord.includes(char)) {
@@ -486,12 +589,9 @@ function processGuess(guess) {
             }
         }
         
-        // Remove letters from wrongPositionLetters if they are fully revealed in the word
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
-            // Count how many times this char appears in the secret word
             let countInSecret = secretWord.split('').filter(c => c === char).length;
-            // Count how many times it is revealed in this specific word
             let countRevealed = revealedLetters[i].filter(c => c === char).length;
             
             if (countRevealed < countInSecret) {
@@ -499,18 +599,12 @@ function processGuess(guess) {
             }
         }
         wrongPositionLetters[i] = filteredWrongPos;
-
-        // Sort alphabetically
         wrongPositionLetters[i] = wrongPositionLetters[i].split('').sort().join('');
     }
 
-    // 2.5 Clean up ALL wrong position letters globally across all words
-    // If a letter is fully revealed across ALL words that contain it, 
-    // it should not appear in ANY yellow wrong position list.
     for (let i = 0; i < 7; i++) {
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
-            // Check if this letter is fully revealed across the ENTIRE board
             let isFullyRevealedGlobally = true;
             for (let w = 0; w < 7; w++) {
                 let countInSecret = secretWords[w].split('').filter(c => c === char).length;
@@ -528,7 +622,6 @@ function processGuess(guess) {
         wrongPositionLetters[i] = filteredWrongPos;
     }
 
-    // 3. Recompute column reds from scratch based on current state
     computeColumnRedLetters();
 }
 
@@ -536,7 +629,6 @@ function computeColumnRedLetters() {
     columnRedLetters = Array(7).fill('');
     
     for (let j = 0; j < 7; j++) {
-        // Skip column if all 7 positions are revealed
         let columnComplete = true;
         for (let i = 0; i < 7; i++) {
             if (!revealedLetters[i][j]) {
@@ -546,14 +638,12 @@ function computeColumnRedLetters() {
         }
         if (columnComplete) continue;
 
-        // Collect all letters guessed in this column position across all guesses
         let guessedInColumn = new Set();
         for (let guess of guesses) {
             guessedInColumn.add(guess[j]);
         }
 
         for (let letter of guessedInColumn) {
-            // Letter must appear as a yellow hint on at least one word row
             let isYellowSomewhere = false;
             for (let i = 0; i < 7; i++) {
                 if (wrongPositionLetters[i].includes(letter)) {
@@ -563,7 +653,6 @@ function computeColumnRedLetters() {
             }
             if (!isYellowSomewhere) continue;
 
-            // Letter must NOT be correct in this column for any word
             let isCorrectInColumn = false;
             for (let i = 0; i < 7; i++) {
                 if (secretWords[i][j] === letter) {
@@ -582,6 +671,8 @@ function computeColumnRedLetters() {
     }
 }
 
+// --- Win Condition ---
+
 function checkWinCondition() {
     let allRevealed = true;
     for (let i = 0; i < 7; i++) {
@@ -596,10 +687,17 @@ function checkWinCondition() {
     if (allRevealed) {
         gameOver = true;
         clearInterval(timerInterval);
-        showMessage('Congratulations! You found all 7 words!');
         document.getElementById('guess-btn').disabled = true;
+
+        if (gameMode === 'daily' && !dailySubmitted) {
+            showNicknameModal();
+        } else {
+            showMessage('Congratulations! You found all 7 words!');
+        }
     }
 }
+
+// --- Keyboard Colors ---
 
 function updateKeyboardColors() {
     const keys = document.querySelectorAll('.key');
@@ -611,7 +709,6 @@ function updateKeyboardColors() {
         let hasBeenGuessed = guesses.some(g => g.includes(char));
         if (!hasBeenGuessed) return;
 
-        // Check if this letter exists in any secret word at all
         let existsInAnyWord = secretWords.some(w => w.includes(char));
         
         if (!existsInAnyWord) {
@@ -620,7 +717,6 @@ function updateKeyboardColors() {
             return;
         }
 
-        // Check if ALL occurrences of this letter in ALL secret words have been revealed
         let allRevealed = true;
         for (let i = 0; i < 7; i++) {
             for (let j = 0; j < 7; j++) {
@@ -638,7 +734,6 @@ function updateKeyboardColors() {
             return;
         }
 
-        // Letter still has unrevealed positions — determine green vs yellow
         let isGreen = false;
         let isYellow = false;
 
@@ -667,8 +762,153 @@ function updateKeyboardColors() {
     });
 }
 
-// Start the game when the page loads
+// --- Nickname Modal ---
+
+function showNicknameModal() {
+    const modal = document.getElementById('nickname-modal');
+    const input = document.getElementById('nickname-input');
+    const saved = localStorage.getItem('seven_sevens_nickname') || '';
+    input.value = saved;
+    modal.classList.remove('hidden');
+    setTimeout(() => input.focus(), 100);
+}
+
+function saveNickname() {
+    const input = document.getElementById('nickname-input');
+    const nickname = input.value.trim();
+    
+    if (!nickname) {
+        input.style.borderColor = 'red';
+        return;
+    }
+    
+    localStorage.setItem('seven_sevens_nickname', nickname);
+    document.getElementById('nickname-modal').classList.add('hidden');
+    
+    submitScore(nickname);
+    showMessage('Congratulations! Score submitted!');
+}
+
+// --- Firebase Score Submission ---
+
+async function submitScore(nickname) {
+    if (!db) {
+        console.warn("Firebase not available. Score not submitted.");
+        return;
+    }
+    
+    const todayStr = getTodayString();
+    
+    if (localStorage.getItem(`daily_submitted_${todayStr}`) === 'true') {
+        return;
+    }
+
+    try {
+        await db.collection('daily_scores').add({
+            date: todayStr,
+            nickname: nickname,
+            time_seconds: getElapsedSeconds(),
+            guesses: guesses.length,
+            green_hints: greenHintCount,
+            yellow_hints: yellowHintCount,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        dailySubmitted = true;
+        localStorage.setItem(`daily_submitted_${todayStr}`, 'true');
+        
+        fetchLeaderboard();
+    } catch (e) {
+        console.error("Error submitting score:", e);
+        showMessage("Error submitting score. Try again.");
+    }
+}
+
+// --- Leaderboard ---
+
+async function fetchLeaderboard() {
+    const container = document.getElementById('scoreboard-list');
+    
+    if (!db) {
+        container.innerHTML = '<p style="text-align:center; color:#888; font-size:0.9em;">Firebase not configured.<br>Set up firebase-config.js to enable the scoreboard.</p>';
+        return;
+    }
+    
+    container.innerHTML = '<p style="text-align:center; color:#888;">Loading...</p>';
+    
+    const todayStr = getTodayString();
+    const myNickname = localStorage.getItem('seven_sevens_nickname') || '';
+    
+    try {
+        // Fetch all scores for today, ordered by: fewest hints, fewest guesses, fastest time
+        const snapshot = await db.collection('daily_scores')
+            .where('date', '==', todayStr)
+            .orderBy('green_hints', 'asc')
+            .orderBy('yellow_hints', 'asc')
+            .orderBy('guesses', 'asc')
+            .orderBy('time_seconds', 'asc')
+            .limit(50)
+            .get();
+        
+        if (snapshot.empty) {
+            container.innerHTML = '<p style="text-align:center; color:#888;">No scores yet today. Be the first!</p>';
+            return;
+        }
+
+        const scores = [];
+        snapshot.forEach(doc => scores.push(doc.data()));
+
+        let myRank = -1;
+        for (let i = 0; i < scores.length; i++) {
+            if (scores[i].nickname === myNickname) {
+                myRank = i + 1;
+                break;
+            }
+        }
+
+        let html = '<table class="scoreboard-table">';
+        html += '<thead><tr><th>#</th><th>Name</th><th>Time</th><th>Guesses</th><th>Hints</th></tr></thead>';
+        html += '<tbody>';
+        
+        const top10 = scores.slice(0, 10);
+        top10.forEach((score, idx) => {
+            const rank = idx + 1;
+            const isMe = score.nickname === myNickname;
+            const m = String(Math.floor(score.time_seconds / 60)).padStart(2, '0');
+            const s = String(score.time_seconds % 60).padStart(2, '0');
+            const hints = score.green_hints + score.yellow_hints;
+            html += `<tr class="${isMe ? 'my-score' : ''}">`;
+            html += `<td>${rank}</td>`;
+            html += `<td>${escapeHtml(score.nickname)}</td>`;
+            html += `<td>${m}:${s}</td>`;
+            html += `<td>${score.guesses}</td>`;
+            html += `<td>${hints}</td>`;
+            html += `</tr>`;
+        });
+        
+        html += '</tbody></table>';
+
+        if (myRank > 10) {
+            html += `<p class="my-rank">Your rank: #${myRank}</p>`;
+        }
+        
+        container.innerHTML = html;
+    } catch (e) {
+        console.error("Error fetching leaderboard:", e);
+        container.innerHTML = '<p style="text-align:center; color:#888;">Could not load scoreboard.</p>';
+    }
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// --- Startup ---
+
 window.onload = () => {
+    initFirebase();
     setupEventListeners();
-    initGame();
+    switchMode('daily');
 };

@@ -7,12 +7,17 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div class="mode-toggle">
+        <button id="mode-daily" class="mode-btn active">Daily Puzzle</button>
+        <button id="mode-practice" class="mode-btn">Practice</button>
+    </div>
+
     <div class="main-wrapper">
         <div class="container">
             <h1>Seven Sevens</h1>
             <p>Guess 7-letter words containing the common letter. Find all 7 secret words! <a href="#" id="rules-link">Rules</a></p>
             
-            <div id="controls">
+            <div id="controls" style="display:none;">
                 <label for="difficulty">Difficulty: </label>
                 <select id="difficulty">
                 <option value="beginner">Beginner (5k words)</option>
@@ -28,11 +33,9 @@
         </div>
         
         <div id="game-board">
-                <!-- 7 rows for the 7 secret words -->
             </div>
             
             <div id="column-feedback">
-                <!-- Red letters for each column -->
                 <div class="col-feedback" id="col-0"></div>
                 <div class="col-feedback" id="col-1"></div>
                 <div class="col-feedback" id="col-2"></div>
@@ -90,9 +93,30 @@
             </div>
         </div>
 
-        <div class="sidebar history">
+        <div class="sidebar history" id="sidebar-history" style="display:none;">
             <h3>Guess History</h3>
             <ul id="guess-history"></ul>
+        </div>
+
+        <div class="sidebar" id="sidebar-scoreboard">
+            <h3>Today's Scoreboard</h3>
+            <div id="scoreboard-list">
+                <p style="text-align:center; color:#888;">Loading...</p>
+            </div>
+            <details class="daily-history-details">
+                <summary>Your Guesses</summary>
+                <ul id="daily-guess-history"></ul>
+            </details>
+        </div>
+    </div>
+
+    <!-- Nickname Modal -->
+    <div id="nickname-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2>Puzzle Complete!</h2>
+            <p>Enter your nickname to save your score:</p>
+            <input type="text" id="nickname-input" maxlength="20" placeholder="Your nickname" autocomplete="off">
+            <button id="nickname-save-btn">Submit Score</button>
         </div>
     </div>
 
@@ -117,8 +141,11 @@
         </div>
     </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="words.js"></script>
     <script src="scrabble_ranks.js"></script>
+    <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

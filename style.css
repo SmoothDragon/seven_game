@@ -1,8 +1,8 @@
 body {
     font-family: Arial, sans-serif;
     display: flex;
-    justify-content: center;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: center;
     background-color: #f0f0f0;
     margin: 0;
     padding: 20px;
@@ -484,4 +484,227 @@ button.hint-btn:disabled {
 
 #rules-link:hover {
     text-decoration: underline;
+}
+
+/* Mode Toggle */
+.mode-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 15px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.mode-btn {
+    padding: 10px 24px;
+    font-size: 1em;
+    font-weight: bold;
+    border: 2px solid #007bff;
+    cursor: pointer;
+    background-color: white;
+    color: #007bff;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.mode-btn:first-child {
+    border-radius: 8px 0 0 8px;
+}
+
+.mode-btn:last-child {
+    border-radius: 0 8px 8px 0;
+    border-left: none;
+}
+
+.mode-btn.active {
+    background-color: #007bff;
+    color: white;
+}
+
+.mode-btn:hover:not(.active) {
+    background-color: #e8f0fe;
+}
+
+/* Scoreboard Table */
+.scoreboard-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+}
+
+.scoreboard-table th {
+    background-color: #007bff;
+    color: white;
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+.scoreboard-table td {
+    padding: 5px 4px;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+}
+
+.scoreboard-table tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.scoreboard-table tr.my-score {
+    background-color: #fff3cd;
+    font-weight: bold;
+}
+
+.scoreboard-table tr.my-score td {
+    border-bottom-color: #ffc107;
+}
+
+.my-rank {
+    text-align: center;
+    margin-top: 10px;
+    font-weight: bold;
+    color: #0056b3;
+    font-size: 0.9em;
+}
+
+/* Collapsible guess history in daily mode */
+.daily-history-details {
+    margin-top: 12px;
+    border-top: 1px solid #ddd;
+    padding-top: 8px;
+}
+
+.daily-history-details summary {
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #555;
+    padding: 4px 0;
+}
+
+.daily-history-details ul {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0 0 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.daily-history-details li {
+    padding: 4px 5px;
+    border-bottom: 1px solid #eee;
+    text-transform: uppercase;
+    text-align: center;
+    font-weight: bold;
+    letter-spacing: 2px;
+    font-size: 0.85em;
+    cursor: pointer;
+    position: relative;
+}
+
+.daily-history-details li:hover {
+    background-color: #f0f0f0;
+}
+
+.daily-history-details li .guess-tooltip {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #fefefe;
+    color: #333;
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    z-index: 100;
+    width: 250px;
+    font-size: 0.8em;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: opacity 0.2s;
+    pointer-events: none;
+    margin-right: 10px;
+}
+
+.daily-history-details li:hover .guess-tooltip {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Nickname Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 3000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-overlay.hidden {
+    display: none;
+}
+
+.modal-content {
+    background: white;
+    padding: 30px 40px;
+    border-radius: 12px;
+    max-width: 380px;
+    width: 90%;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: #28a745;
+}
+
+.modal-content p {
+    color: #555;
+    margin-bottom: 15px;
+}
+
+.modal-content input {
+    width: 80%;
+    padding: 10px;
+    font-size: 1.1em;
+    border: 2px solid #ccc;
+    border-radius: 6px;
+    text-align: center;
+    margin-bottom: 15px;
+    text-transform: none;
+}
+
+.modal-content input:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+.modal-content button {
+    padding: 10px 30px;
+    font-size: 1.1em;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.modal-content button:hover {
+    background-color: #218838;
+}
+
+#sidebar-scoreboard {
+    overflow-y: auto;
 }
