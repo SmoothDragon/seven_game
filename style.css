@@ -198,13 +198,15 @@ input {
     text-transform: uppercase;
     background-color: white;
     color: black;
-    border: 1px solid #ccc;
+    border: 2px solid #ccc;
     border-radius: 4px;
+    caret-color: black; /* Ensure cursor is visible */
 }
 
 input:focus {
     outline: none;
     border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
 }
 
 button {

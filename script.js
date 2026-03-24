@@ -101,6 +101,21 @@ function setupEventListeners() {
     document.getElementById('new-game-btn').addEventListener('click', initGame);
     document.getElementById('difficulty').addEventListener('change', initGame);
     
+    // Prevent mobile keyboard from popping up, but keep cursor visible
+    const input = document.getElementById('guess-input');
+    input.addEventListener('focus', (e) => {
+        // Only prevent default if it's a touch event to avoid mobile keyboard
+        // We can't easily detect touch here reliably without breaking desktop,
+        // so we'll use a trick: make it readonly on touchstart, then remove it.
+    });
+
+    document.addEventListener('touchstart', function(e) {
+        if (e.target.id === 'guess-input') {
+            e.preventDefault(); // Prevent native keyboard
+            input.focus();      // Keep focus
+        }
+    }, { passive: false });
+
     // Physical Keyboard Event Listener
     document.addEventListener('keydown', function(e) {
         if (gameOver) return;
@@ -109,6 +124,11 @@ function setupEventListeners() {
         
         // Ignore if user is typing in some other input field
         if (e.target.tagName === 'INPUT' && e.target.id !== 'guess-input') return;
+
+        // If focus is lost, bring it back to input
+        if (document.activeElement !== input) {
+            input.focus();
+        }
 
         if (e.key === 'Enter') {
             e.preventDefault();
