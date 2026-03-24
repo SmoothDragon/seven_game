@@ -218,7 +218,7 @@ async function fetchDefinition(word, tooltipElement) {
 
     const rankHtml = `<div style="font-size:0.85em; color:#666; margin:4px 0;">` +
         `Usage: #${usageRank.toLocaleString()} / ${total}<br>` +
-        `Scrabble: #${scrabbleRank.toLocaleString()} / ${total}</div>`;
+        `Probability: #${scrabbleRank.toLocaleString()} / ${total}</div>`;
 
     if (definitionsCache[word]) {
         tooltipElement.innerHTML = definitionsCache[word];
