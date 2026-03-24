@@ -211,14 +211,14 @@ function showMessage(msg) {
 let definitionsCache = {};
 
 async function fetchDefinition(word, tooltipElement) {
+    // Get rank of the word (1-indexed)
+    const rank = WORDS.indexOf(word) + 1;
+    const rankText = rank > 0 ? ` (Rank: ${rank.toLocaleString()} / ${WORDS.length.toLocaleString()})` : '';
+
     if (definitionsCache[word]) {
         tooltipElement.innerHTML = definitionsCache[word];
         return;
     }
-
-    // Get rank of the word (1-indexed)
-    const rank = WORDS.indexOf(word) + 1;
-    const rankText = rank > 0 ? ` (Rank: ${rank.toLocaleString()} / ${WORDS.length.toLocaleString()})` : '';
 
     try {
         const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
