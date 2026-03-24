@@ -39,9 +39,9 @@ function initGame() {
     const difficulty = document.getElementById('difficulty').value;
     let currentWordList = [];
     if (difficulty === 'beginner') {
-        currentWordList = WORDS.slice(0, 10000);
+        currentWordList = WORDS.slice(0, 5000);
     } else if (difficulty === 'advanced') {
-        currentWordList = WORDS.slice(0, 30000); // Caps at 25472
+        currentWordList = WORDS.slice(0, 13000);
     } else {
         currentWordList = WORDS;
     }
