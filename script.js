@@ -273,19 +273,18 @@ function processGuess(guess) {
     // 2. Check wrong positions (yellow/right side)
     for (let i = 0; i < 7; i++) {
         const secretWord = secretWords[i];
-        for (let j = 0; j < 7; j++) {
-            const guessedLetter = guess[j];
-            // If the letter is in the secret word, but NOT in the correct position in THIS guess
-            if (guessedLetter !== secretWord[j] && secretWord.includes(guessedLetter)) {
-                // Only add if it's not already in the wrongPositionLetters
-                if (!wrongPositionLetters[i].includes(guessedLetter)) {
-                    wrongPositionLetters[i] += guessedLetter;
+        
+        // Add any guessed letter that is in the secret word
+        let uniqueGuessedLetters = [...new Set(guess.split(''))];
+        for (let char of uniqueGuessedLetters) {
+            if (secretWord.includes(char)) {
+                if (!wrongPositionLetters[i].includes(char)) {
+                    wrongPositionLetters[i] += char;
                 }
             }
         }
         
         // Remove letters from wrongPositionLetters if they are fully revealed in the word
-        // Or just remove them if they are currently revealed in the word
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
             // Count how many times this char appears in the secret word
@@ -306,6 +305,20 @@ function processGuess(guess) {
     // 3. Check column reds
     for (let j = 0; j < 7; j++) {
         const guessedLetter = guess[j];
+        
+        // If a letter occurs in no word (blacked out on keyboard), it should not be shown in red
+        let existsInAnyWord = false;
+        for (let i = 0; i < 7; i++) {
+            if (secretWords[i].includes(guessedLetter)) {
+                existsInAnyWord = true;
+                break;
+            }
+        }
+        
+        if (!existsInAnyWord) {
+            continue; // Skip adding to column reds
+        }
+
         let isCorrectInAnyWord = false;
         
         for (let i = 0; i < 7; i++) {
