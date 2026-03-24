@@ -111,6 +111,17 @@ function setupEventListeners() {
     document.getElementById('new-game-btn').addEventListener('click', initGame);
     document.getElementById('difficulty').addEventListener('change', initGame);
 
+    // Splash / Rules
+    const splash = document.getElementById('splash-overlay');
+    splash.addEventListener('click', function() {
+        splash.classList.add('hidden');
+        input.focus();
+    });
+    document.getElementById('rules-link').addEventListener('click', function(e) {
+        e.preventDefault();
+        splash.classList.remove('hidden');
+    });
+
     // Let native input handle all typing (letters, backspace, delete, selection).
     // We only intercept Enter for submission and refocus when needed.
     input.addEventListener('keydown', function(e) {

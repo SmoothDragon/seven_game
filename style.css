@@ -387,21 +387,62 @@ button:hover {
     opacity: 1;
 }
 
-.history {
-    margin-top: 20px;
-    border-top: 1px solid #ccc;
-    padding-top: 10px;
+/* Splash / Rules Overlay */
+#splash-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
 }
 
-#guess-history {
-    list-style: none;
-    padding: 0;
-    max-height: 150px;
-    overflow-y: auto;
+#splash-overlay.hidden {
+    display: none;
 }
 
-#guess-history li {
-    padding: 5px;
-    border-bottom: 1px solid #eee;
-    text-transform: uppercase;
+#splash-content {
+    background: white;
+    padding: 30px 40px;
+    border-radius: 12px;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    cursor: default;
+}
+
+#splash-content h1 {
+    margin-top: 0;
+    color: #0056b3;
+}
+
+#splash-content ol {
+    padding-left: 20px;
+    line-height: 1.8;
+}
+
+#splash-content .green-text { color: #6aaa64; font-weight: bold; }
+#splash-content .yellow-text { color: #c9b458; font-weight: bold; }
+#splash-content .red-text { color: #d9534f; font-weight: bold; }
+
+.splash-dismiss {
+    text-align: center;
+    color: #888;
+    font-style: italic;
+    margin-bottom: 0;
+}
+
+#rules-link {
+    color: #0056b3;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+#rules-link:hover {
+    text-decoration: underline;
 }

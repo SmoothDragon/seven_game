@@ -10,7 +10,7 @@
     <div class="main-wrapper">
         <div class="container">
             <h1>Seven Sevens</h1>
-            <p>Guess 7-letter words containing the common letter. Find all 7 secret words!</p>
+            <p>Guess 7-letter words containing the common letter. Find all 7 secret words! <a href="#" id="rules-link">Rules</a></p>
             
             <div id="controls">
                 <label for="difficulty">Difficulty: </label>
@@ -89,6 +89,23 @@
         <div class="sidebar history">
             <h3>Guess History</h3>
             <ul id="guess-history"></ul>
+        </div>
+    </div>
+
+    <!-- Splash / Rules Screen -->
+    <div id="splash-overlay">
+        <div id="splash-content">
+            <h1>Welcome to Seven Sevens!</h1>
+            <p>Recover the seven secret words with a common letter.</p>
+            <ol>
+                <li>All guesses must include the common letter and be a word.</li>
+                <li>Guessed letters in the correct position will turn <span class="green-text">green</span>.</li>
+                <li>Guessed letters in incorrect positions will show in <span class="yellow-text">yellow</span> to the right of the word.</li>
+                <li><span class="red-text">Red</span> letters below a column indicate that that letter is not present in that column.</li>
+                <li>The keyboard blackens out letters that are known to be unnecessary to finish.</li>
+                <li>It is sometimes helpful to guess words to gather letter information.</li>
+            </ol>
+            <p class="splash-dismiss">Click anywhere to start!</p>
         </div>
     </div>
 
