@@ -312,7 +312,7 @@ function processGuess(guess) {
         for (let char of wrongPositionLetters[i]) {
             // Count how many times this char appears in the secret word
             let countInSecret = secretWord.split('').filter(c => c === char).length;
-            // Count how many times it is revealed
+            // Count how many times it is revealed in this specific word
             let countRevealed = revealedLetters[i].filter(c => c === char).length;
             
             if (countRevealed < countInSecret) {
@@ -323,6 +323,30 @@ function processGuess(guess) {
 
         // Sort alphabetically
         wrongPositionLetters[i] = wrongPositionLetters[i].split('').sort().join('');
+    }
+
+    // 2.5 Clean up ALL wrong position letters globally across all words
+    // If a letter is fully revealed across ALL words that contain it, 
+    // it should not appear in ANY yellow wrong position list.
+    for (let i = 0; i < 7; i++) {
+        let filteredWrongPos = '';
+        for (let char of wrongPositionLetters[i]) {
+            // Check if this letter is fully revealed across the ENTIRE board
+            let isFullyRevealedGlobally = true;
+            for (let w = 0; w < 7; w++) {
+                let countInSecret = secretWords[w].split('').filter(c => c === char).length;
+                let countRevealed = revealedLetters[w].filter(c => c === char).length;
+                if (countRevealed < countInSecret) {
+                    isFullyRevealedGlobally = false;
+                    break;
+                }
+            }
+            
+            if (!isFullyRevealedGlobally) {
+                filteredWrongPos += char;
+            }
+        }
+        wrongPositionLetters[i] = filteredWrongPos;
     }
 
     // 3. Check column reds
