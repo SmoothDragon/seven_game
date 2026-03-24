@@ -161,12 +161,17 @@ h1 {
 #column-feedback {
     display: flex;
     justify-content: center;
-    gap: 15px;
+    gap: 5px;
     margin-bottom: 20px;
+    /* The yellow feedback boxes on the right add 50px (10px margin + 40px width) 
+       to the total width of the game board rows. To center the red columns exactly 
+       under the letter boxes, we need to offset the red columns container to the left 
+       by half of that extra width (25px) so it aligns with the 7 letter boxes. */
+    transform: translateX(-25px);
 }
 
 .col-feedback {
-    width: 44px;
+    width: 44px; /* 40px width + 2px border on each side of the letter boxes */
     box-sizing: border-box;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
