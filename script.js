@@ -215,12 +215,17 @@ async function fetchDefinition(word, tooltipElement) {
         tooltipElement.innerHTML = definitionsCache[word];
         return;
     }
+
+    // Get rank of the word (1-indexed)
+    const rank = WORDS.indexOf(word) + 1;
+    const rankText = rank > 0 ? ` (Rank: ${rank.toLocaleString()} / ${WORDS.length.toLocaleString()})` : '';
+
     try {
         const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
         if (!response.ok) throw new Error('Not found');
         const data = await response.json();
         
-        let definitionsHtml = `<strong>${word.toUpperCase()}</strong>`;
+        let definitionsHtml = `<strong>${word.toUpperCase()}</strong><span style="font-size:0.85em; color:#666;">${rankText}</span>`;
         data[0].meanings.forEach(meaning => {
             definitionsHtml += `<br><em>${meaning.partOfSpeech}</em><ul>`;
             meaning.definitions.slice(0, 2).forEach(def => {
@@ -232,7 +237,7 @@ async function fetchDefinition(word, tooltipElement) {
         definitionsCache[word] = definitionsHtml;
         tooltipElement.innerHTML = definitionsHtml;
     } catch (e) {
-        definitionsCache[word] = `<strong>${word.toUpperCase()}</strong><br><em>Definition not found in dictionary.</em>`;
+        definitionsCache[word] = `<strong>${word.toUpperCase()}</strong><span style="font-size:0.85em; color:#666;">${rankText}</span><br><em>Definition not found in dictionary.</em>`;
         tooltipElement.innerHTML = definitionsCache[word];
     }
 }
