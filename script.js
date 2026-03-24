@@ -384,26 +384,51 @@ function updateKeyboardColors() {
     
     keys.forEach(key => {
         const char = key.getAttribute('data-key');
-        if (!char || char.length > 1) return; // Skip Enter/Backspace
+        if (!char || char.length > 1) return;
         
-        let isBlack = true;
+        let hasBeenGuessed = guesses.some(g => g.includes(char));
+        if (!hasBeenGuessed) return;
+
+        // Check if this letter exists in any secret word at all
+        let existsInAnyWord = secretWords.some(w => w.includes(char));
+        
+        if (!existsInAnyWord) {
+            key.classList.remove('black', 'green', 'yellow');
+            key.classList.add('black');
+            return;
+        }
+
+        // Check if ALL occurrences of this letter in ALL secret words have been revealed
+        let allRevealed = true;
+        for (let i = 0; i < 7; i++) {
+            for (let j = 0; j < 7; j++) {
+                if (secretWords[i][j] === char && revealedLetters[i][j] !== char) {
+                    allRevealed = false;
+                    break;
+                }
+            }
+            if (!allRevealed) break;
+        }
+
+        if (allRevealed) {
+            key.classList.remove('black', 'green', 'yellow');
+            key.classList.add('black');
+            return;
+        }
+
+        // Letter still has unrevealed positions — determine green vs yellow
         let isGreen = false;
         let isYellow = false;
-        let hasBeenGuessed = false;
 
         for (let guess of guesses) {
-            if (guess.includes(char)) {
-                hasBeenGuessed = true;
-                for (let j = 0; j < 7; j++) {
-                    if (guess[j] === char) {
-                        for (let i = 0; i < 7; i++) {
-                            if (secretWords[i].includes(char)) {
-                                isBlack = false;
-                                if (secretWords[i][j] === char) {
-                                    isGreen = true;
-                                } else {
-                                    isYellow = true;
-                                }
+            for (let j = 0; j < 7; j++) {
+                if (guess[j] === char) {
+                    for (let i = 0; i < 7; i++) {
+                        if (secretWords[i].includes(char)) {
+                            if (secretWords[i][j] === char) {
+                                isGreen = true;
+                            } else {
+                                isYellow = true;
                             }
                         }
                     }
@@ -411,15 +436,11 @@ function updateKeyboardColors() {
             }
         }
 
-        if (hasBeenGuessed) {
-            key.classList.remove('black', 'green', 'yellow');
-            if (isBlack) {
-                key.classList.add('black');
-            } else if (isYellow) {
-                key.classList.add('yellow');
-            } else if (isGreen) {
-                key.classList.add('green');
-            }
+        key.classList.remove('black', 'green', 'yellow');
+        if (isYellow) {
+            key.classList.add('yellow');
+        } else if (isGreen) {
+            key.classList.add('green');
         }
     });
 }
