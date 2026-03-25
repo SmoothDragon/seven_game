@@ -12,6 +12,7 @@ let greenHintCount = 0;
 let yellowHintCount = 0;
 let gameMode = 'daily'; // 'daily' or 'practice'
 let dailySubmitted = false;
+let finalElapsedSeconds = 0;
 
 // --- Seeded RNG (mulberry32) ---
 
@@ -685,6 +686,7 @@ function checkWinCondition() {
     }
 
     if (allRevealed) {
+        finalElapsedSeconds = getElapsedSeconds();
         gameOver = true;
         clearInterval(timerInterval);
         document.getElementById('guess-btn').disabled = true;
@@ -773,7 +775,7 @@ function showNicknameModal() {
     setTimeout(() => input.focus(), 100);
 }
 
-function saveNickname() {
+async function saveNickname() {
     const input = document.getElementById('nickname-input');
     const nickname = input.value.trim();
     
@@ -785,8 +787,10 @@ function saveNickname() {
     localStorage.setItem('seven_sevens_nickname', nickname);
     document.getElementById('nickname-modal').classList.add('hidden');
     
-    submitScore(nickname);
-    showMessage('Congratulations! Score submitted!');
+    const success = await submitScore(nickname);
+    if (success) {
+        showMessage('Congratulations! Score submitted!');
+    }
 }
 
 // --- Firebase Score Submission ---
@@ -794,33 +798,40 @@ function saveNickname() {
 async function submitScore(nickname) {
     if (!db) {
         console.warn("Firebase not available. Score not submitted.");
-        return;
+        showMessage("Scoreboard unavailable — Firebase not connected.");
+        return false;
     }
     
     const todayStr = getTodayString();
     
     if (localStorage.getItem(`daily_submitted_${todayStr}`) === 'true') {
-        return;
+        showMessage('You already submitted a score today!');
+        return false;
     }
 
+    const scoreData = {
+        date: todayStr,
+        nickname: nickname,
+        time_seconds: finalElapsedSeconds,
+        guesses: guesses.length,
+        green_hints: greenHintCount,
+        yellow_hints: yellowHintCount,
+        total_hints: greenHintCount + yellowHintCount,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
     try {
-        await db.collection('daily_scores').add({
-            date: todayStr,
-            nickname: nickname,
-            time_seconds: getElapsedSeconds(),
-            guesses: guesses.length,
-            green_hints: greenHintCount,
-            yellow_hints: yellowHintCount,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        await db.collection('daily_scores').add(scoreData);
         
         dailySubmitted = true;
         localStorage.setItem(`daily_submitted_${todayStr}`, 'true');
         
         fetchLeaderboard();
+        return true;
     } catch (e) {
         console.error("Error submitting score:", e);
-        showMessage("Error submitting score. Try again.");
+        showMessage("Error submitting score: " + e.message);
+        return false;
     }
 }
 
@@ -840,14 +851,8 @@ async function fetchLeaderboard() {
     const myNickname = localStorage.getItem('seven_sevens_nickname') || '';
     
     try {
-        // Fetch all scores for today, ordered by: fewest hints, fewest guesses, fastest time
         const snapshot = await db.collection('daily_scores')
             .where('date', '==', todayStr)
-            .orderBy('green_hints', 'asc')
-            .orderBy('yellow_hints', 'asc')
-            .orderBy('guesses', 'asc')
-            .orderBy('time_seconds', 'asc')
-            .limit(50)
             .get();
         
         if (snapshot.empty) {
@@ -857,6 +862,14 @@ async function fetchLeaderboard() {
 
         const scores = [];
         snapshot.forEach(doc => scores.push(doc.data()));
+
+        scores.sort((a, b) => {
+            const hA = (a.total_hints ?? (a.green_hints + a.yellow_hints));
+            const hB = (b.total_hints ?? (b.green_hints + b.yellow_hints));
+            if (hA !== hB) return hA - hB;
+            if (a.guesses !== b.guesses) return a.guesses - b.guesses;
+            return a.time_seconds - b.time_seconds;
+        });
 
         let myRank = -1;
         for (let i = 0; i < scores.length; i++) {
