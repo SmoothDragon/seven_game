@@ -924,7 +924,7 @@ async function fetchLeaderboard() {
         }
 
         let html = '<table class="scoreboard-table">';
-        html += '<thead><tr><th>#</th><th>Name</th><th>Guesses</th><th>Time</th><th title="Green / Yellow hints">G</th><th>Y</th></tr></thead>';
+        html += '<thead><tr><th>#</th><th>Name</th><th>Guesses</th><th>Time</th><th>Hints</th></tr></thead>';
         html += '<tbody>';
 
         const top10 = scores.slice(0, 10);
@@ -938,8 +938,7 @@ async function fetchLeaderboard() {
             html += `<td>${escapeHtml(score.nickname)}</td>`;
             html += `<td>${score.guesses}</td>`;
             html += `<td>${m}:${s}</td>`;
-            html += `<td>${score.green_hints}</td>`;
-            html += `<td>${score.yellow_hints}</td>`;
+            html += `<td>${score.green_hints + score.yellow_hints}</td>`;
             html += `</tr>`;
         });
         
