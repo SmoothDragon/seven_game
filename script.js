@@ -864,9 +864,8 @@ async function fetchLeaderboard() {
         snapshot.forEach(doc => scores.push(doc.data()));
 
         scores.sort((a, b) => {
-            const hA = (a.total_hints ?? (a.green_hints + a.yellow_hints));
-            const hB = (b.total_hints ?? (b.green_hints + b.yellow_hints));
-            if (hA !== hB) return hA - hB;
+            if (a.green_hints !== b.green_hints) return a.green_hints - b.green_hints;
+            if (a.yellow_hints !== b.yellow_hints) return a.yellow_hints - b.yellow_hints;
             if (a.guesses !== b.guesses) return a.guesses - b.guesses;
             return a.time_seconds - b.time_seconds;
         });
@@ -880,7 +879,7 @@ async function fetchLeaderboard() {
         }
 
         let html = '<table class="scoreboard-table">';
-        html += '<thead><tr><th>#</th><th>Name</th><th>Time</th><th>Guesses</th><th>Hints</th></tr></thead>';
+        html += '<thead><tr><th>#</th><th>Name</th><th>Time</th><th>Guesses</th><th title="Green / Yellow hints">G</th><th>Y</th></tr></thead>';
         html += '<tbody>';
         
         const top10 = scores.slice(0, 10);
@@ -889,13 +888,13 @@ async function fetchLeaderboard() {
             const isMe = score.nickname === myNickname;
             const m = String(Math.floor(score.time_seconds / 60)).padStart(2, '0');
             const s = String(score.time_seconds % 60).padStart(2, '0');
-            const hints = score.green_hints + score.yellow_hints;
             html += `<tr class="${isMe ? 'my-score' : ''}">`;
             html += `<td>${rank}</td>`;
             html += `<td>${escapeHtml(score.nickname)}</td>`;
             html += `<td>${m}:${s}</td>`;
             html += `<td>${score.guesses}</td>`;
-            html += `<td>${hints}</td>`;
+            html += `<td>${score.green_hints}</td>`;
+            html += `<td>${score.yellow_hints}</td>`;
             html += `</tr>`;
         });
         
