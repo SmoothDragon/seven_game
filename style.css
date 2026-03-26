@@ -567,30 +567,29 @@ button.hint-btn:disabled {
     font-size: 0.9em;
 }
 
-/* Collapsible guess history in daily mode */
-.daily-history-details {
+/* Guess history in daily mode sidebar */
+.daily-history-section {
     margin-top: 12px;
     border-top: 1px solid #ddd;
     padding-top: 8px;
 }
 
-.daily-history-details summary {
-    cursor: pointer;
-    font-weight: bold;
+.daily-history-section h4 {
+    margin: 0 0 6px 0;
     font-size: 0.9em;
     color: #555;
-    padding: 4px 0;
+    text-align: center;
 }
 
-.daily-history-details ul {
+.daily-history-section ul {
     list-style: none;
     padding: 0;
-    margin: 6px 0 0 0;
+    margin: 0;
     max-height: 200px;
     overflow-y: auto;
 }
 
-.daily-history-details li {
+.daily-history-section li {
     padding: 4px 5px;
     border-bottom: 1px solid #eee;
     text-transform: uppercase;
@@ -602,11 +601,11 @@ button.hint-btn:disabled {
     position: relative;
 }
 
-.daily-history-details li:hover {
+.daily-history-section li:hover {
     background-color: #f0f0f0;
 }
 
-.daily-history-details li .guess-tooltip {
+.daily-history-section li .guess-tooltip {
     visibility: hidden;
     opacity: 0;
     position: absolute;
@@ -631,7 +630,7 @@ button.hint-btn:disabled {
     margin-right: 10px;
 }
 
-.daily-history-details li:hover .guess-tooltip {
+.daily-history-section li:hover .guess-tooltip {
     visibility: visible;
     opacity: 1;
 }
