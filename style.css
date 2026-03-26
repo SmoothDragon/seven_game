@@ -138,6 +138,30 @@ h1 {
 
 #timer-display {
     font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pause-btn {
+    padding: 2px 8px;
+    font-size: 1em;
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #555;
+    line-height: 1;
+}
+
+.pause-btn:hover {
+    background-color: #eee;
+    border-color: #999;
+}
+
+#game-board.hidden,
+#column-feedback.hidden {
+    visibility: hidden;
 }
 
 #common-letter {

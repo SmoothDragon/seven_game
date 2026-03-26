@@ -13,6 +13,8 @@ let yellowHintCount = 0;
 let gameMode = 'daily'; // 'daily' or 'practice'
 let dailySubmitted = false;
 let finalElapsedSeconds = 0;
+let paused = false;
+let pausedElapsed = 0;
 
 // --- Seeded RNG (mulberry32) ---
 
@@ -44,24 +46,57 @@ function getTodayString() {
 // --- Timer ---
 
 function updateTimer() {
-    if (!startTime || gameOver) return;
-    const now = Date.now();
-    const diff = Math.floor((now - startTime) / 1000);
+    if (!startTime || gameOver || paused) return;
+    const diff = Math.floor((Date.now() - startTime) / 1000) + pausedElapsed;
     const m = String(Math.floor(diff / 60)).padStart(2, '0');
     const s = String(diff % 60).padStart(2, '0');
     document.getElementById('timer').textContent = `${m}:${s}`;
 }
 
 function startTimerIfNeeded() {
-    if (!startTime && !gameOver) {
+    if (!startTime && !gameOver && !paused) {
         startTime = Date.now();
         timerInterval = setInterval(updateTimer, 1000);
     }
 }
 
 function getElapsedSeconds() {
-    if (!startTime) return 0;
-    return Math.floor((Date.now() - startTime) / 1000);
+    if (!startTime) return pausedElapsed;
+    return Math.floor((Date.now() - startTime) / 1000) + pausedElapsed;
+}
+
+function togglePause() {
+    if (gameOver) return;
+    if (!startTime && !paused) return;
+
+    paused = !paused;
+    const btn = document.getElementById('pause-btn');
+
+    if (paused) {
+        pausedElapsed += Math.floor((Date.now() - startTime) / 1000);
+        startTime = null;
+        clearInterval(timerInterval);
+        btn.textContent = '▶';
+        btn.title = 'Resume';
+        document.getElementById('game-board').classList.add('hidden');
+        document.getElementById('column-feedback').classList.add('hidden');
+        document.getElementById('guess-input').disabled = true;
+        document.getElementById('guess-btn').disabled = true;
+        document.getElementById('green-hint-btn').disabled = true;
+        document.getElementById('yellow-hint-btn').disabled = true;
+    } else {
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+        btn.textContent = '⏸';
+        btn.title = 'Pause';
+        document.getElementById('game-board').classList.remove('hidden');
+        document.getElementById('column-feedback').classList.remove('hidden');
+        document.getElementById('guess-input').disabled = false;
+        document.getElementById('guess-btn').disabled = false;
+        document.getElementById('green-hint-btn').disabled = false;
+        document.getElementById('yellow-hint-btn').disabled = false;
+        document.getElementById('guess-input').focus();
+    }
 }
 
 // --- Mode Switching ---
@@ -113,7 +148,14 @@ function resetGameState() {
 
     clearInterval(timerInterval);
     startTime = null;
+    paused = false;
+    pausedElapsed = 0;
     document.getElementById('timer').textContent = '00:00';
+    document.getElementById('pause-btn').textContent = '⏸';
+    document.getElementById('pause-btn').title = 'Pause';
+    document.getElementById('game-board').classList.remove('hidden');
+    document.getElementById('column-feedback').classList.remove('hidden');
+    document.getElementById('guess-input').disabled = false;
 }
 
 function pickWordsWithRng(rng, wordList) {
@@ -228,6 +270,9 @@ function setupEventListeners() {
 
     document.getElementById('green-hint-btn').addEventListener('click', useGreenHint);
     document.getElementById('yellow-hint-btn').addEventListener('click', useYellowHint);
+
+    // Pause button
+    document.getElementById('pause-btn').addEventListener('click', togglePause);
 
     // Mode toggle
     document.getElementById('mode-daily').addEventListener('click', () => switchMode('daily'));
@@ -879,9 +924,9 @@ async function fetchLeaderboard() {
         }
 
         let html = '<table class="scoreboard-table">';
-        html += '<thead><tr><th>#</th><th>Name</th><th>Time</th><th>Guesses</th><th title="Green / Yellow hints">G</th><th>Y</th></tr></thead>';
+        html += '<thead><tr><th>#</th><th>Name</th><th>Guesses</th><th>Time</th><th title="Green / Yellow hints">G</th><th>Y</th></tr></thead>';
         html += '<tbody>';
-        
+
         const top10 = scores.slice(0, 10);
         top10.forEach((score, idx) => {
             const rank = idx + 1;
@@ -891,8 +936,8 @@ async function fetchLeaderboard() {
             html += `<tr class="${isMe ? 'my-score' : ''}">`;
             html += `<td>${rank}</td>`;
             html += `<td>${escapeHtml(score.nickname)}</td>`;
-            html += `<td>${m}:${s}</td>`;
             html += `<td>${score.guesses}</td>`;
+            html += `<td>${m}:${s}</td>`;
             html += `<td>${score.green_hints}</td>`;
             html += `<td>${score.yellow_hints}</td>`;
             html += `</tr>`;
