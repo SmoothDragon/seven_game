@@ -15,6 +15,7 @@ let dailySubmitted = false;
 let finalElapsedSeconds = 0;
 let paused = false;
 let pausedElapsed = 0;
+let secondarySortKey = 'guesses'; // 'guesses' or 'time'
 
 // --- Seeded RNG (mulberry32) ---
 
@@ -909,8 +910,15 @@ async function fetchLeaderboard() {
         snapshot.forEach(doc => scores.push(doc.data()));
 
         scores.sort((a, b) => {
-            if (a.green_hints !== b.green_hints) return a.green_hints - b.green_hints;
-            if (a.yellow_hints !== b.yellow_hints) return a.yellow_hints - b.yellow_hints;
+            const hintsA = (a.green_hints || 0) + (a.yellow_hints || 0);
+            const hintsB = (b.green_hints || 0) + (b.yellow_hints || 0);
+            if (hintsA !== hintsB) return hintsA - hintsB;
+
+            if (secondarySortKey === 'time') {
+                if (a.time_seconds !== b.time_seconds) return a.time_seconds - b.time_seconds;
+                return a.guesses - b.guesses;
+            }
+
             if (a.guesses !== b.guesses) return a.guesses - b.guesses;
             return a.time_seconds - b.time_seconds;
         });
@@ -923,8 +931,13 @@ async function fetchLeaderboard() {
             }
         }
 
+        const guessArrow = secondarySortKey === 'guesses' ? ' ▼' : '';
+        const timeArrow = secondarySortKey === 'time' ? ' ▼' : '';
         let html = '<table class="scoreboard-table">';
-        html += '<thead><tr><th>#</th><th>Name</th><th>Guesses</th><th>Time</th><th>Hints</th></tr></thead>';
+        html += '<thead><tr><th>#</th><th>Name</th>' +
+            `<th><button class="sort-header-btn" data-sort="guesses">Guesses${guessArrow}</button></th>` +
+            `<th><button class="sort-header-btn" data-sort="time">Time${timeArrow}</button></th>` +
+            '<th>Hints</th></tr></thead>';
         html += '<tbody>';
 
         const top10 = scores.slice(0, 10);
@@ -949,6 +962,12 @@ async function fetchLeaderboard() {
         }
         
         container.innerHTML = html;
+        container.querySelectorAll('.sort-header-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                secondarySortKey = btn.dataset.sort;
+                fetchLeaderboard();
+            });
+        });
     } catch (e) {
         console.error("Error fetching leaderboard:", e);
         container.innerHTML = '<p style="text-align:center; color:#888;">Could not load scoreboard.</p>';
