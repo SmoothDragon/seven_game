@@ -199,8 +199,6 @@ function initDailyGame() {
     
     pickWordsWithRng(rng, beginnerList);
 
-    console.log("Daily words:", secretWords);
-
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
     fetchLeaderboard();
@@ -249,8 +247,6 @@ function initGame() {
         secretWords.push(tempCandidates[randomIndex]);
         tempCandidates.splice(randomIndex, 1);
     }
-
-    console.log("Secret words:", secretWords);
 
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
