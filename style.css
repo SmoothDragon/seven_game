@@ -809,3 +809,25 @@ button.hint-btn:disabled {
 #sidebar-scoreboard {
     overflow-y: auto;
 }
+
+/* Phones & narrow viewports: stack game above sidebars (avoids scoreboard overlapping play area) */
+@media (max-width: 900px) {
+    .main-wrapper {
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+    }
+
+    .container {
+        flex: none;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .sidebar {
+        width: 100%;
+        max-width: 100%;
+        min-height: 0;
+        flex: none;
+    }
+}
