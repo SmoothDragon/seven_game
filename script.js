@@ -44,6 +44,16 @@ function getTodayString() {
     return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 }
 
+let probableWordListCache = null;
+
+function getProbableWordList() {
+    if (probableWordListCache) return probableWordListCache;
+    const indices = WORDS.map((_, i) => i);
+    indices.sort((a, b) => SCRABBLE_RANKS[a] - SCRABBLE_RANKS[b]);
+    probableWordListCache = indices.slice(0, 5000).map((i) => WORDS[i]);
+    return probableWordListCache;
+}
+
 // --- Timer ---
 
 function updateTimer() {
@@ -218,10 +228,10 @@ function initGame() {
 
     const difficulty = document.getElementById('difficulty').value;
     let currentWordList = [];
-    if (difficulty === 'beginner') {
+    if (difficulty === 'common') {
         currentWordList = WORDS.slice(0, 5000);
-    } else if (difficulty === 'advanced') {
-        currentWordList = WORDS.slice(0, 13000);
+    } else if (difficulty === 'probable') {
+        currentWordList = getProbableWordList();
     } else {
         currentWordList = WORDS;
     }
