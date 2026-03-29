@@ -481,7 +481,17 @@ button.hint-btn:disabled {
 
 #splash-content h1 {
     margin-top: 0;
-    color: #0056b3;
+    color: #000;
+}
+
+#splash-content .splash-intro {
+    text-align: center;
+}
+
+#splash-content .splash-wgpo {
+    font-size: 0.85em;
+    color: #666;
+    text-align: center;
 }
 
 #splash-content ol {

@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seven Sevens</title>
+    <title>7 Sevens</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div class="mode-toggle">
         <button id="mode-daily" class="mode-btn active">Daily Puzzle</button>
@@ -14,30 +16,31 @@
 
     <div class="main-wrapper">
         <div class="container">
-            <h1>Seven Sevens</h1>
-            <p>Guess 7-letter words containing the common letter. Find all 7 secret words! <a href="#" id="rules-link">Rules</a></p>
-            
+            <h1>7 Sevens</h1>
+            <p>Guess 7-letter words containing the common letter. Find all 7 secret words! <a href="#"
+                    id="rules-link">Rules</a></p>
+
             <div id="controls" style="display:none;">
                 <label for="difficulty">Difficulty: </label>
                 <select id="difficulty">
-                <option value="beginner">Beginner (5k words)</option>
-                <option value="advanced">Advanced (13k words)</option>
+                    <option value="beginner">Beginner (5k words)</option>
+                    <option value="advanced">Advanced (13k words)</option>
                     <option value="expert">Expert (All words)</option>
                 </select>
                 <button id="new-game-btn">New Game</button>
             </div>
 
-        <div class="game-header">
-            <div id="common-letter-display">Common Letter: <span id="common-letter"></span></div>
-            <div id="timer-display">
-                Time: <span id="timer">00:00</span>
-                <button id="pause-btn" class="pause-btn" title="Pause">⏸</button>
+            <div class="game-header">
+                <div id="common-letter-display">Common Letter: <span id="common-letter"></span></div>
+                <div id="timer-display">
+                    Time: <span id="timer">00:00</span>
+                    <button id="pause-btn" class="pause-btn" title="Pause">⏸</button>
+                </div>
             </div>
-        </div>
-        
-        <div id="game-board">
+
+            <div id="game-board">
             </div>
-            
+
             <div id="column-feedback">
                 <div class="col-feedback" id="col-0"></div>
                 <div class="col-feedback" id="col-1"></div>
@@ -48,16 +51,19 @@
                 <div class="col-feedback" id="col-6"></div>
             </div>
 
-        <div class="input-area">
-            <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off" spellcheck="false" inputmode="none" autofocus>
-            <button id="guess-btn">Guess</button>
-        </div>
-        <div class="hint-area">
-            <button id="green-hint-btn" class="hint-btn green-hint">Green Hint (<span id="green-hint-count">0</span>)</button>
-            <button id="yellow-hint-btn" class="hint-btn yellow-hint">Yellow Hint (<span id="yellow-hint-count">0</span>)</button>
-        </div>
+            <div class="input-area">
+                <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off"
+                    spellcheck="false" inputmode="none" autofocus>
+                <button id="guess-btn">Guess</button>
+            </div>
+            <div class="hint-area">
+                <button id="green-hint-btn" class="hint-btn green-hint">Green Hint (<span
+                        id="green-hint-count">0</span>)</button>
+                <button id="yellow-hint-btn" class="hint-btn yellow-hint">Yellow Hint (<span
+                        id="yellow-hint-count">0</span>)</button>
+            </div>
             <div id="message"></div>
-            
+
             <div id="keyboard">
                 <div class="keyboard-row">
                     <button class="key" data-key="q">Q</button>
@@ -126,21 +132,26 @@
     <!-- Splash / Rules Screen -->
     <div id="splash-overlay">
         <div id="splash-content">
-            <h1>Welcome to Seven Sevens!</h1>
-            <p>Recover the seven secret words with a common letter.</p>
+            <h1>Welcome to 7 Sevens!</h1>
+            <p class="splash-intro">Seven secret words with a common letter.</p>
+            <p class="splash-dismiss">Click anywhere to start!</p>
             <ol>
                 <li>All guesses must include the common letter and be a word.</li>
                 <li>Guessed letters in the correct position will turn <span class="green-text">green</span>.</li>
-                <li>Guessed letters in incorrect positions will show in <span class="yellow-text">yellow</span> to the right of the word.</li>
-                <li><span class="red-text">Red</span> letters below a column indicate that that letter is not present in that column.</li>
+                <li>Guessed letters in incorrect positions will show in <span class="yellow-text">yellow</span> to the
+                    right of the word.</li>
+                <li><span class="red-text">Red</span> letters below a column indicate that that letter is not present in
+                    that column.</li>
                 <li>The keyboard blackens out letters that are known to be unnecessary to finish.</li>
                 <li>It is sometimes helpful to guess words to gather letter information.</li>
-                <li><span class="green-text">Green Hint</span>: Reveals a random unknown letter in its correct position across all words. Use when you are stuck!</li>
-                <li><span class="yellow-text">Yellow Hint</span>: Reveals an unguessed letter in yellow for all the words that contain it, without showing its position.</li>
+                <li><span class="green-text">Green Hint</span>: Reveals a random unknown letter in its correct position
+                    across all words.</li>
+                <li><span class="yellow-text">Yellow Hint</span>: Reveals an unguessed letter in yellow for all the
+                    words that contain it, without showing its position.</li>
             </ol>
-            <p style="font-size: 0.9em; color: #666;">Hint usage is tracked. Try to solve the puzzle with as few hints as possible!</p>
-            <p style="font-size: 0.85em; color: #666;">All words are from the <a href="https://wordgameplayers.org/wgpo-official-words/" target="_blank" rel="noopener">WGPO Official Words (WOW)</a> list.</p>
-            <p class="splash-dismiss">Click anywhere to start!</p>
+            <p class="splash-wgpo">All words are from the <a href="https://wordgameplayers.org/wgpo-official-words/"
+                    target="_blank" rel="noopener">WGPO Official
+                    Words (WOW)</a> list.</p>
         </div>
     </div>
 
@@ -151,4 +162,5 @@
     <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>
