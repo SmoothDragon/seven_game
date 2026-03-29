@@ -978,7 +978,8 @@ async function submitScore(nickname) {
 
 async function fetchLeaderboard() {
     const container = document.getElementById('scoreboard-list');
-    
+    if (!container) return;
+
     if (!db) {
         container.innerHTML = '<p style="text-align:center; color:#888; font-size:0.9em;">Firebase not configured.<br>Set up firebase-config.js to enable the scoreboard.</p>';
         return;
@@ -1044,7 +1045,7 @@ async function fetchLeaderboard() {
             html += `<td>${escapeHtml(score.nickname)}</td>`;
             html += `<td>${score.guesses}</td>`;
             html += `<td>${m}:${s}</td>`;
-            html += `<td>${score.green_hints + score.yellow_hints}</td>`;
+            html += `<td>${(score.green_hints || 0) + (score.yellow_hints || 0)}</td>`;
             html += `</tr>`;
         });
         
@@ -1063,7 +1064,11 @@ async function fetchLeaderboard() {
         });
     } catch (e) {
         console.error("Error fetching leaderboard:", e);
-        container.innerHTML = '<p style="text-align:center; color:#888;">Could not load scoreboard.</p>';
+        const detail = e && e.message ? ` (${e.message})` : '';
+        container.innerHTML =
+            '<p style="text-align:center; color:#888;">Could not load scoreboard.' +
+            escapeHtml(detail) +
+            '</p>';
     }
 }
 

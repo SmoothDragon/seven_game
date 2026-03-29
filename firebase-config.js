@@ -15,14 +15,24 @@ let db = null;
 
 function initFirebase() {
     try {
-        if (typeof firebase !== 'undefined') {
-            firebase.initializeApp(firebaseConfig);
-            db = firebase.firestore();
-            console.log("Firebase initialized successfully.");
-        } else {
+        if (typeof firebase === 'undefined') {
             console.warn("Firebase SDK not loaded. Scoreboard features disabled.");
+            return;
         }
+        // Avoid "Firebase App named '[DEFAULT]' already exists" on back/forward cache or double init.
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.firestore();
+        console.log("Firebase initialized successfully.");
     } catch (e) {
         console.warn("Firebase initialization failed:", e.message);
+        try {
+            if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+                db = firebase.firestore();
+            }
+        } catch (e2) {
+            console.warn("Could not attach Firestore after init error:", e2.message);
+        }
     }
 }
