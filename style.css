@@ -132,6 +132,17 @@ h1 {
     padding: 0 10px;
 }
 
+.game-header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+#guess-count-display {
+    font-weight: bold;
+    white-space: nowrap;
+}
+
 #common-letter-display {
     text-align: left;
 }

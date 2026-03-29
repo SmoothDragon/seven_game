@@ -66,6 +66,10 @@ function getElapsedSeconds() {
     return Math.floor((Date.now() - startTime) / 1000) + pausedElapsed;
 }
 
+function updateGuessCountDisplay() {
+    document.getElementById('guess-count').textContent = guesses.length;
+}
+
 function togglePause() {
     if (gameOver) return;
     if (!startTime && !paused) return;
@@ -157,6 +161,7 @@ function resetGameState() {
     document.getElementById('game-board').classList.remove('hidden');
     document.getElementById('column-feedback').classList.remove('hidden');
     document.getElementById('guess-input').disabled = false;
+    updateGuessCountDisplay();
 }
 
 function pickWordsWithRng(rng, wordList) {
@@ -588,6 +593,7 @@ function handleGuess() {
     startTimerIfNeeded();
     
     guesses.push(guess);
+    updateGuessCountDisplay();
     processGuess(guess);
     updateKeyboardColors();
     
