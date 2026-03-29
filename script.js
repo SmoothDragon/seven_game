@@ -18,6 +18,50 @@ let pausedElapsed = 0;
 let secondarySortKey = 'guesses'; // 'guesses' or 'time'
 let wordLen = 7;
 
+let words8LexiconLoadPromise = null;
+
+function appendLexiconScript(src) {
+    return new Promise((resolve, reject) => {
+        const id = `lexicon-${src.replace(/[^a-z0-9._-]/gi, '_')}`;
+        const existing = document.getElementById(id);
+        if (existing) {
+            if (existing.dataset.loaded === 'true') {
+                resolve();
+                return;
+            }
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+            return;
+        }
+        const s = document.createElement('script');
+        s.id = id;
+        s.src = src;
+        s.async = false;
+        s.onload = () => {
+            s.dataset.loaded = 'true';
+            resolve();
+        };
+        s.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.head.appendChild(s);
+    });
+}
+
+function ensureWords8LexiconLoaded() {
+    if (typeof WORDS8 !== 'undefined' && typeof SCRABBLE_RANKS8 !== 'undefined') {
+        return Promise.resolve();
+    }
+    if (!words8LexiconLoadPromise) {
+        words8LexiconLoadPromise = (async () => {
+            await appendLexiconScript('words8.js');
+            await appendLexiconScript('scrabble_ranks8.js');
+        })();
+    }
+    return words8LexiconLoadPromise.catch((err) => {
+        words8LexiconLoadPromise = null;
+        throw err;
+    });
+}
+
 function getActiveLexicon() {
     return wordLen === 8 ? WORDS8 : WORDS;
 }
@@ -282,8 +326,24 @@ function initDailyGame() {
     }, 100);
 }
 
-function initGame() {
-    wordLen = parseInt(document.getElementById('practice-word-length').value, 10) || 7;
+async function initGame() {
+    const nextLen = parseInt(document.getElementById('practice-word-length').value, 10) || 7;
+    const msgEl = document.getElementById('message');
+
+    if (nextLen === 8) {
+        msgEl.textContent = 'Loading 8-letter dictionary…';
+        try {
+            await ensureWords8LexiconLoaded();
+        } catch (e) {
+            console.error(e);
+            msgEl.textContent = '';
+            showMessage('Could not load 8-letter dictionary. Check your connection and try again.');
+            return;
+        }
+        msgEl.textContent = '';
+    }
+
+    wordLen = nextLen;
     resetGameState();
     updateCategoryOptionLabels();
     updateGameTaglineText();
@@ -481,6 +541,15 @@ function showMessage(msg) {
 let definitionsCache = {};
 
 async function fetchDefinition(word, tooltipElement) {
+    if (wordLen === 8) {
+        try {
+            await ensureWords8LexiconLoaded();
+        } catch (e) {
+            console.error(e);
+            tooltipElement.innerHTML = `<strong>${word.toUpperCase()}</strong><em> Word list not loaded.</em>`;
+            return;
+        }
+    }
     const list = getActiveLexicon();
     const ranks = getActiveRanks();
     const wordIndex = list.indexOf(word);
