@@ -16,6 +16,52 @@ let finalElapsedSeconds = 0;
 let paused = false;
 let pausedElapsed = 0;
 let secondarySortKey = 'guesses'; // 'guesses' or 'time'
+let wordLen = 7;
+
+function getActiveLexicon() {
+    return wordLen === 8 ? WORDS8 : WORDS;
+}
+
+function getActiveRanks() {
+    return wordLen === 8 ? SCRABBLE_RANKS8 : SCRABBLE_RANKS;
+}
+
+function buildColumnFeedbackDom() {
+    const cf = document.getElementById('column-feedback');
+    cf.innerHTML = '';
+    for (let j = 0; j < wordLen; j++) {
+        const d = document.createElement('div');
+        d.className = 'col-feedback';
+        d.id = `col-${j}`;
+        cf.appendChild(d);
+    }
+    cf.style.setProperty('--word-len', String(wordLen));
+}
+
+function updateGameTaglineText() {
+    const s = document.getElementById('game-tagline-text');
+    if (!s) return;
+    if (gameMode === 'daily') {
+        s.textContent = 'Guess 7-letter words containing the common letter. Find all 7 secret words!';
+    } else {
+        s.textContent = `Guess ${wordLen}-letter words containing the common letter. Find all 7 secret words!`;
+    }
+}
+
+function updateCategoryOptionLabels() {
+    const sel = document.getElementById('difficulty');
+    if (!sel || gameMode !== 'practice') return;
+    const n = wordLen;
+    sel.options[0].textContent = `Common (5k most common ${n}-letter)`;
+    sel.options[1].textContent = `Probable (5k most probable ${n}-letter)`;
+    sel.options[2].textContent = `All valid WGPO ${n}-letter`;
+}
+
+function syncGuessInputForWordLen() {
+    const input = document.getElementById('guess-input');
+    input.maxLength = wordLen;
+    input.placeholder = `Enter ${wordLen}-letter word`;
+}
 
 // --- Seeded RNG (mulberry32) ---
 
@@ -45,6 +91,7 @@ function getTodayString() {
 }
 
 let probableWordListCache = null;
+let probableWordListCache8 = null;
 
 function getProbableWordList() {
     if (probableWordListCache) return probableWordListCache;
@@ -52,6 +99,14 @@ function getProbableWordList() {
     indices.sort((a, b) => SCRABBLE_RANKS[a] - SCRABBLE_RANKS[b]);
     probableWordListCache = indices.slice(0, 5000).map((i) => WORDS[i]);
     return probableWordListCache;
+}
+
+function getProbableWordList8() {
+    if (probableWordListCache8) return probableWordListCache8;
+    const indices = WORDS8.map((_, i) => i);
+    indices.sort((a, b) => SCRABBLE_RANKS8[a] - SCRABBLE_RANKS8[b]);
+    probableWordListCache8 = indices.slice(0, 5000).map((i) => WORDS8[i]);
+    return probableWordListCache8;
 }
 
 // --- Timer ---
@@ -134,6 +189,7 @@ function switchMode(mode) {
     } else {
         initGame();
     }
+    updateGameTaglineText();
 }
 
 // --- Game Initialization ---
@@ -141,9 +197,10 @@ function switchMode(mode) {
 function resetGameState() {
     gameOver = false;
     guesses = [];
-    revealedLetters = Array(7).fill(null).map(() => Array(7).fill(''));
+    revealedLetters = Array(7).fill(null).map(() => Array(wordLen).fill(''));
     wrongPositionLetters = Array(7).fill('');
-    columnRedLetters = Array(7).fill('');
+    columnRedLetters = Array(wordLen).fill('');
+    buildColumnFeedbackDom();
     dailySubmitted = false;
     document.getElementById('guess-input').value = '';
     document.getElementById('guess-history').innerHTML = '';
@@ -171,6 +228,7 @@ function resetGameState() {
     document.getElementById('game-board').classList.remove('hidden');
     document.getElementById('column-feedback').classList.remove('hidden');
     document.getElementById('guess-input').disabled = false;
+    syncGuessInputForWordLen();
     updateGuessCountDisplay();
 }
 
@@ -203,6 +261,7 @@ function pickWordsWithRng(rng, wordList) {
 }
 
 function initDailyGame() {
+    wordLen = 7;
     resetGameState();
     
     const todayStr = getTodayString();
@@ -224,16 +283,29 @@ function initDailyGame() {
 }
 
 function initGame() {
+    wordLen = parseInt(document.getElementById('practice-word-length').value, 10) || 7;
     resetGameState();
+    updateCategoryOptionLabels();
+    updateGameTaglineText();
 
     const difficulty = document.getElementById('difficulty').value;
     let currentWordList = [];
-    if (difficulty === 'common') {
-        currentWordList = WORDS.slice(0, 5000);
-    } else if (difficulty === 'probable') {
-        currentWordList = getProbableWordList();
+    if (wordLen === 8) {
+        if (difficulty === 'common') {
+            currentWordList = WORDS8.slice(0, 5000);
+        } else if (difficulty === 'probable') {
+            currentWordList = getProbableWordList8();
+        } else {
+            currentWordList = WORDS8;
+        }
     } else {
-        currentWordList = WORDS;
+        if (difficulty === 'common') {
+            currentWordList = WORDS.slice(0, 5000);
+        } else if (difficulty === 'probable') {
+            currentWordList = getProbableWordList();
+        } else {
+            currentWordList = WORDS;
+        }
     }
 
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
@@ -279,6 +351,7 @@ function setupEventListeners() {
     document.getElementById('guess-btn').addEventListener('click', handleGuess);
     document.getElementById('new-game-btn').addEventListener('click', initGame);
     document.getElementById('difficulty').addEventListener('change', initGame);
+    document.getElementById('practice-word-length').addEventListener('change', initGame);
 
     document.getElementById('green-hint-btn').addEventListener('click', useGreenHint);
     document.getElementById('yellow-hint-btn').addEventListener('click', useYellowHint);
@@ -337,7 +410,7 @@ function setupEventListeners() {
                     input.value = input.value.slice(0, -1);
                 }
             } else {
-                if (input.value.length < 7) {
+                if (input.value.length < wordLen) {
                     input.value += char;
                 }
             }
@@ -350,6 +423,7 @@ function setupEventListeners() {
 
 function renderBoard() {
     const board = document.getElementById('game-board');
+    board.dataset.wordLen = String(wordLen);
     board.innerHTML = '';
 
     for (let i = 0; i < 7; i++) {
@@ -358,7 +432,7 @@ function renderBoard() {
         
         let isCompleted = true;
 
-        for (let j = 0; j < 7; j++) {
+        for (let j = 0; j < wordLen; j++) {
             const box = document.createElement('div');
             box.className = 'letter-box';
             if (revealedLetters[i][j]) {
@@ -387,7 +461,7 @@ function renderBoard() {
         board.appendChild(row);
     }
 
-    for (let j = 0; j < 7; j++) {
+    for (let j = 0; j < wordLen; j++) {
         const colFeedback = document.getElementById(`col-${j}`);
         colFeedback.innerHTML = columnRedLetters[j].split('').map(c => `<span>${c}</span>`).join('');
     }
@@ -407,14 +481,21 @@ function showMessage(msg) {
 let definitionsCache = {};
 
 async function fetchDefinition(word, tooltipElement) {
-    const wordIndex = WORDS.indexOf(word);
-    const usageRank = wordIndex + 1;
-    const scrabbleRank = SCRABBLE_RANKS[wordIndex];
-    const total = WORDS.length.toLocaleString();
-
-    const rankHtml = `<div style="font-size:0.85em; color:#666; margin:4px 0;">` +
-        `Usage: #${usageRank.toLocaleString()} / ${total}<br>` +
-        `Probability: #${scrabbleRank.toLocaleString()} / ${total}</div>`;
+    const list = getActiveLexicon();
+    const ranks = getActiveRanks();
+    const wordIndex = list.indexOf(word);
+    const total = list.length.toLocaleString();
+    let rankHtml;
+    if (wordIndex < 0) {
+        rankHtml = `<div style="font-size:0.85em; color:#666; margin:4px 0;">` +
+            `Usage: —<br>Probability: —</div>`;
+    } else {
+        const usageRank = wordIndex + 1;
+        const scrabbleRank = ranks[wordIndex];
+        rankHtml = `<div style="font-size:0.85em; color:#666; margin:4px 0;">` +
+            `Usage: #${usageRank.toLocaleString()} / ${total}<br>` +
+            `Probability: #${scrabbleRank.toLocaleString()} / ${total}</div>`;
+    }
 
     if (definitionsCache[word]) {
         tooltipElement.innerHTML = definitionsCache[word];
@@ -451,7 +532,7 @@ function useGreenHint() {
 
     let unrevealed = [];
     for (let i = 0; i < 7; i++) {
-        for (let j = 0; j < 7; j++) {
+        for (let j = 0; j < wordLen; j++) {
             if (!revealedLetters[i][j]) {
                 unrevealed.push({ i, j });
             }
@@ -584,11 +665,11 @@ function handleGuess() {
         input.focus();
     };
 
-    if (guess.length !== 7) {
-        return handleError('Guess must be exactly 7 letters.');
+    if (guess.length !== wordLen) {
+        return handleError(`Guess must be exactly ${wordLen} letters.`);
     }
 
-    if (!WORDS.includes(guess)) {
+    if (!getActiveLexicon().includes(guess)) {
         return handleError('Not a valid word in the list.');
     }
 
@@ -629,7 +710,7 @@ function handleGuess() {
 function processGuess(guess) {
     for (let i = 0; i < 7; i++) {
         const secretWord = secretWords[i];
-        for (let j = 0; j < 7; j++) {
+        for (let j = 0; j < wordLen; j++) {
             if (guess[j] === secretWord[j]) {
                 revealedLetters[i][j] = guess[j];
             }
@@ -685,9 +766,9 @@ function processGuess(guess) {
 }
 
 function computeColumnRedLetters() {
-    columnRedLetters = Array(7).fill('');
+    columnRedLetters = Array(wordLen).fill('');
     
-    for (let j = 0; j < 7; j++) {
+    for (let j = 0; j < wordLen; j++) {
         let columnComplete = true;
         for (let i = 0; i < 7; i++) {
             if (!revealedLetters[i][j]) {
@@ -735,7 +816,7 @@ function computeColumnRedLetters() {
 function checkWinCondition() {
     let allRevealed = true;
     for (let i = 0; i < 7; i++) {
-        for (let j = 0; j < 7; j++) {
+        for (let j = 0; j < wordLen; j++) {
             if (!revealedLetters[i][j]) {
                 allRevealed = false;
                 break;
@@ -779,7 +860,7 @@ function updateKeyboardColors() {
 
         let allRevealed = true;
         for (let i = 0; i < 7; i++) {
-            for (let j = 0; j < 7; j++) {
+            for (let j = 0; j < wordLen; j++) {
                 if (secretWords[i][j] === char && revealedLetters[i][j] !== char) {
                     allRevealed = false;
                     break;
@@ -798,7 +879,7 @@ function updateKeyboardColors() {
         let isYellow = false;
 
         for (let guess of guesses) {
-            for (let j = 0; j < 7; j++) {
+            for (let j = 0; j < wordLen; j++) {
                 if (guess[j] === char) {
                     for (let i = 0; i < 7; i++) {
                         if (secretWords[i].includes(char)) {

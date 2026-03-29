@@ -107,6 +107,7 @@ h1 {
 
 #controls {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     align-items: center;
     gap: 10px;
@@ -213,6 +214,16 @@ h1 {
     border-color: #6aaa64;
 }
 
+#game-board[data-word-len="8"] .letter-box {
+    width: 36px;
+    height: 36px;
+    font-size: 1.35em;
+}
+
+#game-board[data-word-len="8"] .col-feedback {
+    width: 40px;
+}
+
 .wrong-position-feedback {
     margin-left: 10px;
     color: #c9b458;
@@ -236,11 +247,9 @@ h1 {
     justify-content: center;
     gap: 5px;
     margin-bottom: 20px;
-    /* The yellow feedback boxes on the right add 50px (10px margin + 40px width) 
-       to the total width of the game board rows. To center the red columns exactly 
-       under the letter boxes, we need to offset the red columns container to the left 
-       by half of that extra width (25px) so it aligns with the 7 letter boxes. */
-    transform: translateX(-25px);
+    --word-len: 7;
+    /* Yellow feedback adds ~50px to row width; offset ~half per extra letter column vs 7. */
+    transform: translateX(calc(-25px - 22.5px * (var(--word-len, 7) - 7)));
 }
 
 .col-feedback {

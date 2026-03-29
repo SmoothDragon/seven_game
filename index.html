@@ -17,15 +17,20 @@
     <div class="main-wrapper">
         <div class="container">
             <h1>7 Sevens</h1>
-            <p>Guess 7-letter words containing the common letter. Find all 7 secret words! <a href="#"
-                    id="rules-link">Rules</a></p>
+            <p><span id="game-tagline-text">Guess 7-letter words containing the common letter. Find all 7 secret
+                    words!</span> <a href="#" id="rules-link">Rules</a></p>
 
             <div id="controls" style="display:none;">
+                <label for="practice-word-length">Word length: </label>
+                <select id="practice-word-length">
+                    <option value="7">7 letters</option>
+                    <option value="8">8 letters</option>
+                </select>
                 <label for="difficulty">Category: </label>
                 <select id="difficulty">
-                    <option value="common">Common (5k most common 7s)</option>
-                    <option value="probable">Probable (5k most probable 7s)</option>
-                    <option value="all">All valid WGPO 7s</option>
+                    <option value="common">Common (5k most common 7-letter)</option>
+                    <option value="probable">Probable (5k most probable 7-letter)</option>
+                    <option value="all">All valid WGPO 7-letter</option>
                 </select>
                 <button id="new-game-btn">New Game</button>
             </div>
@@ -44,15 +49,7 @@
             <div id="game-board">
             </div>
 
-            <div id="column-feedback">
-                <div class="col-feedback" id="col-0"></div>
-                <div class="col-feedback" id="col-1"></div>
-                <div class="col-feedback" id="col-2"></div>
-                <div class="col-feedback" id="col-3"></div>
-                <div class="col-feedback" id="col-4"></div>
-                <div class="col-feedback" id="col-5"></div>
-                <div class="col-feedback" id="col-6"></div>
-            </div>
+            <div id="column-feedback"></div>
 
             <div class="input-area">
                 <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off"
@@ -139,7 +136,8 @@
             <p class="splash-intro">Seven secret words with a common letter.</p>
             <p class="splash-dismiss">Click anywhere to start!</p>
             <ol>
-                <li>All guesses must include the common letter and be a word.</li>
+                <li>All guesses must include the common letter and be a valid WGPO word. The daily puzzle is always
+                    seven 7-letter words; in Practice you can play 7- or 8-letter words.</li>
                 <li>Guessed letters in the correct position will turn <span class="green-text">green</span>.</li>
                 <li>Guessed letters in incorrect positions will show in <span class="yellow-text">yellow</span> to the
                     right of the word.</li>
@@ -162,6 +160,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="words.js"></script>
     <script src="scrabble_ranks.js"></script>
+    <script src="words8.js"></script>
+    <script src="scrabble_ranks8.js"></script>
     <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
