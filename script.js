@@ -17,6 +17,8 @@ let paused = false;
 let pausedElapsed = 0;
 let secondarySortKey = 'guesses'; // 'guesses' or 'time'
 let wordLen = 7;
+let fireworksTimerId = null;
+let fireworksEpoch = 0;
 
 let words8LexiconLoadPromise = null;
 
@@ -273,6 +275,7 @@ function resetGameState() {
     document.getElementById('guess-input').disabled = false;
     syncGuessInputForWordLen();
     updateGuessCountDisplay();
+    clearFireworksOverlay();
 }
 
 function pickWordsWithRng(rng, wordList) {
@@ -883,6 +886,86 @@ function computeColumnRedLetters() {
 
 // --- Win Condition ---
 
+const FIREWORKS_TOTAL_MS = 1000;
+
+function clearFireworksOverlay() {
+    fireworksEpoch++;
+    const overlay = document.getElementById('fireworks-overlay');
+    if (fireworksTimerId !== null) {
+        clearTimeout(fireworksTimerId);
+        fireworksTimerId = null;
+    }
+    if (overlay) {
+        overlay.classList.add('hidden');
+        overlay.innerHTML = '';
+    }
+}
+
+function launchFireworks() {
+    const overlay = document.getElementById('fireworks-overlay');
+    if (!overlay) return;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        return;
+    }
+
+    if (fireworksTimerId !== null) {
+        clearTimeout(fireworksTimerId);
+        fireworksTimerId = null;
+    }
+
+    fireworksEpoch++;
+    const myEpoch = fireworksEpoch;
+
+    overlay.classList.remove('hidden');
+    overlay.innerHTML = '';
+
+    const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff922b', '#e599f7', '#ffffff', '#22d3ee'];
+    const burstCount = 6;
+    const burstInterval = 80;
+
+    for (let b = 0; b < burstCount; b++) {
+        setTimeout(() => {
+            if (myEpoch !== fireworksEpoch) return;
+            const x = 12 + Math.random() * 76;
+            const y = 12 + Math.random() * 76;
+            const particleCount = 28;
+            const burst = document.createElement('div');
+            burst.className = 'firework-burst';
+            burst.style.left = `${x}%`;
+            burst.style.top = `${y}%`;
+            overlay.appendChild(burst);
+
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (i / particleCount) * Math.PI * 2 + Math.random() * 0.35;
+                const dist = 28 + Math.random() * 40;
+                const p = document.createElement('div');
+                p.className = 'firework-particle';
+                p.style.setProperty('--tx', `${Math.cos(angle) * dist}px`);
+                p.style.setProperty('--ty', `${Math.sin(angle) * dist}px`);
+                p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                burst.appendChild(p);
+            }
+
+            setTimeout(() => {
+                if (myEpoch === fireworksEpoch && burst.parentNode) {
+                    burst.remove();
+                }
+            }, 450);
+        }, b * burstInterval);
+    }
+
+    fireworksTimerId = setTimeout(() => {
+        if (myEpoch !== fireworksEpoch) {
+            fireworksTimerId = null;
+            return;
+        }
+        overlay.classList.add('hidden');
+        overlay.innerHTML = '';
+        fireworksTimerId = null;
+    }, FIREWORKS_TOTAL_MS);
+}
+
 function checkWinCondition() {
     let allRevealed = true;
     for (let i = 0; i < wordLen; i++) {
@@ -899,6 +982,8 @@ function checkWinCondition() {
         gameOver = true;
         clearInterval(timerInterval);
         document.getElementById('guess-btn').disabled = true;
+
+        launchFireworks();
 
         if (gameMode === 'daily' && !dailySubmitted) {
             showNicknameModal();

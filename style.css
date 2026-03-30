@@ -193,14 +193,69 @@ h1 {
     color: #0056b3;
 }
 
+.board-wrap {
+    position: relative;
+    margin-bottom: 10px;
+    max-width: 100%;
+}
+
+.fireworks-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+.fireworks-overlay.hidden {
+    display: none;
+}
+
+.firework-burst {
+    position: absolute;
+    width: 0;
+    height: 0;
+    transform: translate(-50%, -50%);
+}
+
+.firework-particle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 5px;
+    height: 5px;
+    margin: -2.5px 0 0 -2.5px;
+    border-radius: 50%;
+    animation: firework-particle 0.42s ease-out forwards;
+}
+
+@keyframes firework-particle {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(var(--tx), var(--ty)) scale(0.2);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .firework-particle {
+        animation-duration: 0.01ms !important;
+    }
+}
+
 #game-board {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    margin-bottom: 10px;
     max-width: 100%;
     padding-top: 2px;
+    position: relative;
+    z-index: 1;
 }
 
 .word-row {
