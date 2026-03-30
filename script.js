@@ -79,7 +79,6 @@ function buildColumnFeedbackDom() {
         d.id = `col-${j}`;
         cf.appendChild(d);
     }
-    cf.style.setProperty('--word-len', String(wordLen));
 }
 
 function updateGameTaglineText() {
@@ -88,7 +87,7 @@ function updateGameTaglineText() {
     if (gameMode === 'daily') {
         s.textContent = 'Guess 7-letter words containing the common letter. Find all 7 secret words!';
     } else {
-        s.textContent = `Guess ${wordLen}-letter words containing the common letter. Find all 7 secret words!`;
+        s.textContent = `Guess ${wordLen}-letter words containing the common letter. Find all ${wordLen} secret words!`;
     }
 }
 
@@ -193,7 +192,7 @@ function togglePause() {
         btn.textContent = '▶';
         btn.title = 'Resume';
         document.getElementById('game-board').classList.add('hidden');
-        document.getElementById('column-feedback').classList.add('hidden');
+        document.getElementById('column-feedback-row').classList.add('hidden');
         document.getElementById('guess-input').disabled = true;
         document.getElementById('guess-btn').disabled = true;
         document.getElementById('green-hint-btn').disabled = true;
@@ -204,7 +203,7 @@ function togglePause() {
         btn.textContent = '⏸';
         btn.title = 'Pause';
         document.getElementById('game-board').classList.remove('hidden');
-        document.getElementById('column-feedback').classList.remove('hidden');
+        document.getElementById('column-feedback-row').classList.remove('hidden');
         document.getElementById('guess-input').disabled = false;
         document.getElementById('guess-btn').disabled = false;
         document.getElementById('green-hint-btn').disabled = false;
@@ -241,8 +240,8 @@ function switchMode(mode) {
 function resetGameState() {
     gameOver = false;
     guesses = [];
-    revealedLetters = Array(7).fill(null).map(() => Array(wordLen).fill(''));
-    wrongPositionLetters = Array(7).fill('');
+    revealedLetters = Array(wordLen).fill(null).map(() => Array(wordLen).fill(''));
+    wrongPositionLetters = Array(wordLen).fill('');
     columnRedLetters = Array(wordLen).fill('');
     buildColumnFeedbackDom();
     dailySubmitted = false;
@@ -252,7 +251,7 @@ function resetGameState() {
     document.getElementById('guess-btn').disabled = false;
     
     document.querySelectorAll('.key').forEach(key => {
-        key.classList.remove('black', 'green', 'yellow');
+        key.classList.remove('black', 'green', 'yellow', 'cyan');
     });
 
     greenHintCount = 0;
@@ -270,7 +269,7 @@ function resetGameState() {
     document.getElementById('pause-btn').textContent = '⏸';
     document.getElementById('pause-btn').title = 'Pause';
     document.getElementById('game-board').classList.remove('hidden');
-    document.getElementById('column-feedback').classList.remove('hidden');
+    document.getElementById('column-feedback-row').classList.remove('hidden');
     document.getElementById('guess-input').disabled = false;
     syncGuessInputForWordLen();
     updateGuessCountDisplay();
@@ -297,7 +296,7 @@ function pickWordsWithRng(rng, wordList) {
 
     secretWords = [];
     let tempCandidates = [...candidateWords];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         const randomIndex = Math.floor(rng() * tempCandidates.length);
         secretWords.push(tempCandidates[randomIndex]);
         tempCandidates.splice(randomIndex, 1);
@@ -389,7 +388,7 @@ async function initGame() {
 
     secretWords = [];
     let tempCandidates = [...candidateWords];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         const randomIndex = Math.floor(Math.random() * tempCandidates.length);
         secretWords.push(tempCandidates[randomIndex]);
         tempCandidates.splice(randomIndex, 1);
@@ -484,9 +483,11 @@ function setupEventListeners() {
 function renderBoard() {
     const board = document.getElementById('game-board');
     board.dataset.wordLen = String(wordLen);
+    const cfRow = document.getElementById('column-feedback-row');
+    if (cfRow) cfRow.dataset.wordLen = String(wordLen);
     board.innerHTML = '';
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         const row = document.createElement('div');
         row.className = 'word-row';
         
@@ -600,7 +601,7 @@ function useGreenHint() {
     startTimerIfNeeded();
 
     let unrevealed = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         for (let j = 0; j < wordLen; j++) {
             if (!revealedLetters[i][j]) {
                 unrevealed.push({ i, j });
@@ -613,7 +614,7 @@ function useGreenHint() {
     const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
     const letter = secretWords[pick.i][pick.j];
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         if (secretWords[i][pick.j] === letter) {
             revealedLetters[i][pick.j] = letter;
         }
@@ -644,7 +645,7 @@ function useYellowHint() {
     for (let letter of allSecretLetters) {
         let isKnown = false;
 
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < wordLen; i++) {
             if (wrongPositionLetters[i].includes(letter)) {
                 isKnown = true;
                 break;
@@ -652,7 +653,7 @@ function useYellowHint() {
         }
 
         if (!isKnown) {
-            for (let i = 0; i < 7; i++) {
+            for (let i = 0; i < wordLen; i++) {
                 if (revealedLetters[i].includes(letter)) {
                     isKnown = true;
                     break;
@@ -672,7 +673,7 @@ function useYellowHint() {
 
     const letter = undiscoveredLetters[Math.floor(Math.random() * undiscoveredLetters.length)];
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         if (secretWords[i].includes(letter) && !wrongPositionLetters[i].includes(letter)) {
             wrongPositionLetters[i] += letter;
             wrongPositionLetters[i] = wrongPositionLetters[i].split('').sort().join('');
@@ -688,7 +689,7 @@ function useYellowHint() {
 }
 
 function recomputeYellowLetters() {
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         const secretWord = secretWords[i];
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
@@ -701,11 +702,11 @@ function recomputeYellowLetters() {
         wrongPositionLetters[i] = filteredWrongPos;
     }
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
             let isFullyRevealedGlobally = true;
-            for (let w = 0; w < 7; w++) {
+            for (let w = 0; w < wordLen; w++) {
                 let countInSecret = secretWords[w].split('').filter(c => c === char).length;
                 let countRevealed = revealedLetters[w].filter(c => c === char).length;
                 if (countRevealed < countInSecret) {
@@ -777,7 +778,7 @@ function handleGuess() {
 }
 
 function processGuess(guess) {
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         const secretWord = secretWords[i];
         for (let j = 0; j < wordLen; j++) {
             if (guess[j] === secretWord[j]) {
@@ -786,7 +787,7 @@ function processGuess(guess) {
         }
     }
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         const secretWord = secretWords[i];
         
         let uniqueGuessedLetters = [...new Set(guess.split(''))];
@@ -811,11 +812,11 @@ function processGuess(guess) {
         wrongPositionLetters[i] = wrongPositionLetters[i].split('').sort().join('');
     }
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         let filteredWrongPos = '';
         for (let char of wrongPositionLetters[i]) {
             let isFullyRevealedGlobally = true;
-            for (let w = 0; w < 7; w++) {
+            for (let w = 0; w < wordLen; w++) {
                 let countInSecret = secretWords[w].split('').filter(c => c === char).length;
                 let countRevealed = revealedLetters[w].filter(c => c === char).length;
                 if (countRevealed < countInSecret) {
@@ -839,7 +840,7 @@ function computeColumnRedLetters() {
     
     for (let j = 0; j < wordLen; j++) {
         let columnComplete = true;
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < wordLen; i++) {
             if (!revealedLetters[i][j]) {
                 columnComplete = false;
                 break;
@@ -854,7 +855,7 @@ function computeColumnRedLetters() {
 
         for (let letter of guessedInColumn) {
             let isYellowSomewhere = false;
-            for (let i = 0; i < 7; i++) {
+            for (let i = 0; i < wordLen; i++) {
                 if (wrongPositionLetters[i].includes(letter)) {
                     isYellowSomewhere = true;
                     break;
@@ -863,7 +864,7 @@ function computeColumnRedLetters() {
             if (!isYellowSomewhere) continue;
 
             let isCorrectInColumn = false;
-            for (let i = 0; i < 7; i++) {
+            for (let i = 0; i < wordLen; i++) {
                 if (secretWords[i][j] === letter) {
                     isCorrectInColumn = true;
                     break;
@@ -884,7 +885,7 @@ function computeColumnRedLetters() {
 
 function checkWinCondition() {
     let allRevealed = true;
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < wordLen; i++) {
         for (let j = 0; j < wordLen; j++) {
             if (!revealedLetters[i][j]) {
                 allRevealed = false;
@@ -902,12 +903,25 @@ function checkWinCondition() {
         if (gameMode === 'daily' && !dailySubmitted) {
             showNicknameModal();
         } else {
-            showMessage('Congratulations! You found all 7 words!');
+            showMessage(`Congratulations! You found all ${wordLen} words!`);
         }
     }
 }
 
 // --- Keyboard Colors ---
+
+/** True if some word row containing `char` still has at least one unrevealed cell (word not finished). */
+function incompleteWordRowContainsChar(char) {
+    for (let i = 0; i < wordLen; i++) {
+        if (!secretWords[i].includes(char)) continue;
+        for (let j = 0; j < wordLen; j++) {
+            if (!revealedLetters[i][j]) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 function updateKeyboardColors() {
     const keys = document.querySelectorAll('.key');
@@ -922,13 +936,13 @@ function updateKeyboardColors() {
         let existsInAnyWord = secretWords.some(w => w.includes(char));
         
         if (!existsInAnyWord) {
-            key.classList.remove('black', 'green', 'yellow');
+            key.classList.remove('black', 'green', 'yellow', 'cyan');
             key.classList.add('black');
             return;
         }
 
         let allRevealed = true;
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < wordLen; i++) {
             for (let j = 0; j < wordLen; j++) {
                 if (secretWords[i][j] === char && revealedLetters[i][j] !== char) {
                     allRevealed = false;
@@ -939,8 +953,12 @@ function updateKeyboardColors() {
         }
 
         if (allRevealed) {
-            key.classList.remove('black', 'green', 'yellow');
-            key.classList.add('black');
+            key.classList.remove('black', 'green', 'yellow', 'cyan');
+            if (incompleteWordRowContainsChar(char)) {
+                key.classList.add('cyan');
+            } else {
+                key.classList.add('black');
+            }
             return;
         }
 
@@ -950,7 +968,7 @@ function updateKeyboardColors() {
         for (let guess of guesses) {
             for (let j = 0; j < wordLen; j++) {
                 if (guess[j] === char) {
-                    for (let i = 0; i < 7; i++) {
+                    for (let i = 0; i < wordLen; i++) {
                         if (secretWords[i].includes(char)) {
                             if (secretWords[i][j] === char) {
                                 isGreen = true;
@@ -963,7 +981,7 @@ function updateKeyboardColors() {
             }
         }
 
-        key.classList.remove('black', 'green', 'yellow');
+        key.classList.remove('black', 'green', 'yellow', 'cyan');
         if (isYellow) {
             key.classList.add('yellow');
         } else if (isGreen) {

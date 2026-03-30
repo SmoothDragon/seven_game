@@ -49,7 +49,10 @@
             <div id="game-board">
             </div>
 
-            <div id="column-feedback"></div>
+            <div class="column-feedback-row" id="column-feedback-row">
+                <div id="column-feedback"></div>
+                <div class="column-feedback-spacer" aria-hidden="true"></div>
+            </div>
 
             <div class="input-area">
                 <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off"
@@ -137,7 +140,7 @@
             <p class="splash-dismiss">Click anywhere to start!</p>
             <ol>
                 <li>All guesses must include the common letter and be a valid WGPO word. The daily puzzle is always
-                    seven 7-letter words; in Practice you can play 7- or 8-letter words.</li>
+                    seven 7-letter words; in Practice you can play seven 7-letter or eight 8-letter words per game.</li>
                 <li>Guessed letters in the correct position will turn <span class="green-text">green</span>.</li>
                 <li>Guessed letters in incorrect positions will show in <span class="yellow-text">yellow</span> to the
                     right of the word.</li>

@@ -184,7 +184,7 @@ h1 {
 }
 
 #game-board.hidden,
-#column-feedback.hidden {
+#column-feedback-row.hidden {
     visibility: hidden;
 }
 
@@ -243,10 +243,6 @@ h1 {
     font-size: 18px;
 }
 
-#game-board[data-word-len="8"] .col-feedback {
-    width: 40px;
-}
-
 .wrong-position-feedback {
     margin-left: 10px;
     color: #c9b458;
@@ -265,30 +261,53 @@ h1 {
     line-height: 1;
 }
 
+#game-board[data-word-len="8"] .wrong-position-feedback {
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    width: 48px;
+}
+
+/* Matches .word-row layout: letter columns + gap + yellow-feedback block (same width as spacer) */
+.column-feedback-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin-bottom: 20px;
+}
+
+.column-feedback-spacer {
+    width: 40px;
+    margin-left: 10px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+
+#column-feedback-row[data-word-len="8"] .column-feedback-spacer {
+    width: 48px;
+}
+
 #column-feedback {
     display: flex;
     justify-content: center;
     gap: 5px;
-    margin-bottom: 20px;
-    --word-len: 7;
-    /* Yellow feedback adds ~50px to row width; offset ~half per extra letter column vs 7. */
-    transform: translateX(calc(-25px - 22.5px * (var(--word-len, 7) - 7)));
 }
 
 .col-feedback {
-    width: 44px; /* 40px width + 2px border on each side of the letter boxes */
+    width: 40px; /* match .letter-box width */
+    min-width: 40px;
     box-sizing: border-box;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     justify-items: center;
     color: #d9534f;
     font-weight: bold;
-    font-size: 0.75em; /* Reduced from 0.85em */
+    font-size: 0.75em;
     text-transform: uppercase;
-    gap: 0;
+    gap: 1px 2px;
     background-color: #fde8e8;
     border-radius: 4px;
-    padding: 2px 1px; /* Slightly reduced horizontal padding */
+    padding: 2px 1px;
 }
 
 .col-feedback:empty {
@@ -300,6 +319,11 @@ h1 {
     text-align: center;
     line-height: 1.2; /* Slightly tighter line height */
     letter-spacing: -0.5px; /* Pull letters slightly closer together */
+}
+
+#column-feedback-row[data-word-len="8"] .col-feedback {
+    width: 34px;
+    min-width: 34px;
 }
 
 .input-area {
@@ -448,6 +472,15 @@ button.hint-btn:disabled {
 .key.black {
     background-color: #3a3a3c;
     color: white;
+}
+
+.key.cyan {
+    background-color: #06b6d4;
+    color: #fff;
+}
+
+.key.cyan:hover {
+    background-color: #0891b2;
 }
 
 .key.green {
