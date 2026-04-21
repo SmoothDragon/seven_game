@@ -21,11 +21,12 @@ This document is a complete specification of the **Seven 7s** web game. It is wr
 
 ### Modes
 
-- **Daily Puzzle** — same for everyone on a given date, seeded from the current date. A scoreboard of today's finishers (nickname + time + guesses + hints) is shown in a sidebar, fetched from Firestore.
+- **Daily Puzzle** — same for everyone on a given date, seeded from the current date. A scoreboard of today's finishers (nickname + time + guesses + hints) is shown in a sidebar, fetched from Firestore. Each submitted solve also stores the full sequence of guesses with timestamps so it can be replayed later (see Past 7 below).
 - **Practice** — infinite random puzzles. The player chooses word length (7 or 8) and a difficulty:
   - *Common* — 5k most frequent words by usage.
   - *Probable* — 5k "most probable" words by Scrabble-tile likelihood.
   - *All* — full WGPO word list.
+- **Past 7** — read-only gallery of the seven preceding daily puzzles (yesterday back through seven days ago). Each day is shown as a card with its common letter and the best solve's stats. Clicking a card opens a replay of that player's guesses: the board animates guess-by-guess, and a log on the side lists `mm:ss  WORD` for each guess in order.
 
 ---
 
@@ -63,21 +64,26 @@ There is no `package.json` — the game ships as plain static files. The only No
 
 One page, one `<body>`. Major elements, in order:
 
-1. **Mode toggle** (`.mode-toggle`) with two buttons: `#mode-daily` and `#mode-practice` (the active one has the `.active` class).
+1. **Mode toggle** (`.mode-toggle`) with three buttons: `#mode-daily`, `#mode-practice`, `#mode-past7` (the active one has the `.active` class). Only the first and last buttons have rounded outer corners; all non-first buttons share a left border with their neighbour (`border-left:none`).
 2. **`.main-wrapper`** containing:
    - **`.container`** — the playfield. Inside:
      - `<h1>Seven 7s</h1>`
      - Tagline paragraph with `#game-tagline-text` span and a `#rules-link` (`<a href="#">Rules</a>`).
      - **`#controls`** (hidden unless in practice mode) — `#practice-word-length` select (7/8), `#difficulty` select (common/probable/all), `#new-game-btn`.
-     - **`.game-header`**:
-       - `#common-letter-display` → "Common Letter: `<span id="common-letter">`".
-       - `.game-header-right` containing `#guess-count-display` (`Guesses: <span id="guess-count">0</span>`), and `#timer-display` with `<span id="timer">00:00</span>` plus a `#pause-btn` (`⏸` / `▶`).
-     - **`.board-wrap` (#board-wrap)** containing `#game-board` and a `.fireworks-overlay` `#fireworks-overlay`.
-     - **`.column-feedback-row` (#column-feedback-row)** with `#column-feedback` + a `.column-feedback-spacer` so columns align with letter-boxes above them (there's a trailing spacer matching the yellow-feedback grid's width).
-     - **`.input-area`** with `#guess-input` (text input, maxlength initially 7, `inputmode="none"` so the on-screen keyboard appears instead of the OS one, `autocomplete="off"`, `spellcheck="false"`) and a `#guess-btn`.
-     - **`.hint-area`** with `#green-hint-btn` (showing `Green Hint (<span id="green-hint-count">0</span>)`) and `#yellow-hint-btn` (showing yellow count).
-     - `#message` — transient error/info line.
-     - **`#keyboard`** — three `.keyboard-row`s containing `.key` buttons with `data-key` attributes: Q-W-E-R-T-Y-U-I-O-P, A-S-D-F-G-H-J-K-L, ENTER (`.key.wide data-key="Enter"`) + Z-X-C-V-B-N-M + Backspace (`.key.wide data-key="Backspace"` rendered as `⌫`).
+     - **`#game-play-area`** — wrapper around all live-game UI (hidden in Past 7 mode via `display:none`). Contains, in order:
+       - **`.game-header`**:
+         - `#common-letter-display` → "Common Letter: `<span id="common-letter">`".
+         - `.game-header-right` containing `#guess-count-display` (`Guesses: <span id="guess-count">0</span>`), and `#timer-display` with `<span id="timer">00:00</span>` plus a `#pause-btn` (`⏸` / `▶`).
+       - **`.board-wrap` (#board-wrap)** containing `#game-board` and a `.fireworks-overlay` `#fireworks-overlay`.
+       - **`.column-feedback-row` (#column-feedback-row)** with `#column-feedback` + a `.column-feedback-spacer` so columns align with letter-boxes above them (there's a trailing spacer matching the yellow-feedback grid's width).
+       - **`.input-area`** with `#guess-input` (text input, maxlength initially 7, `inputmode="none"` so the on-screen keyboard appears instead of the OS one, `autocomplete="off"`, `spellcheck="false"`) and a `#guess-btn`.
+       - **`.hint-area`** with `#green-hint-btn` (showing `Green Hint (<span id="green-hint-count">0</span>)`) and `#yellow-hint-btn` (showing yellow count).
+       - `#message` — transient error/info line.
+       - **`#keyboard`** — three `.keyboard-row`s containing `.key` buttons with `data-key` attributes: Q-W-E-R-T-Y-U-I-O-P, A-S-D-F-G-H-J-K-L, ENTER (`.key.wide data-key="Enter"`) + Z-X-C-V-B-N-M + Backspace (`.key.wide data-key="Backspace"` rendered as `⌫`).
+     - **`#past7-section`** (hidden except in Past 7 mode) — contains:
+       - `<h2 class="past7-title">Past 7 Days</h2>` and `.past7-subtitle` paragraph.
+       - `#past7-grid.past7-grid` — a CSS-grid of `.past7-card` tiles, one per past day.
+       - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with `#past7-replay-board`, `#past7-replay-controls` (`#past7-replay-play`, `#past7-replay-speed`), and `ul#past7-replay-log.past7-replay-log`.
    - **Sidebars** (outside `.container` but inside `.main-wrapper`):
      - `#sidebar-history` (`.sidebar.history`, only visible in practice mode, `display:none` by default) containing `<h3>Guess History</h3>` and `<ul id="guess-history">`.
      - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) with `<h3>Today's Scoreboard</h3>`, `#scoreboard-list`, and a `.daily-history-section` with `<h4>Your Guesses</h4>` + `<ul id="daily-guess-history">`.
@@ -133,11 +139,12 @@ let revealedLetters;         // wordLen × wordLen array of '' or the letter (gr
 let wrongPositionLetters;    // wordLen strings; each is the sorted unique yellow letters for row i
 let columnRedLetters;        // wordLen strings; each is the red-in-this-column letters
 let guesses = [];            // array of lowercase guessed strings
+let guessLog = [];           // [{word, t}] — elapsed seconds when each guess was made
 let gameOver = false;
 let startTime, timerInterval;
 let pausedElapsed = 0, paused = false;
 let greenHintCount = 0, yellowHintCount = 0;
-let gameMode = 'daily';      // 'daily' | 'practice'
+let gameMode = 'daily';      // 'daily' | 'practice' | 'past7'
 let dailySubmitted = false;  // whether the user already submitted a score today
 let finalElapsedSeconds = 0;
 let secondarySortKey = 'guesses';  // 'guesses' | 'time' — leaderboard sort toggle
@@ -146,6 +153,19 @@ let fireworksTimerId = null, fireworksEpoch = 0;
 let words8LexiconLoadPromise = null;
 let probableWordListCache = null, probableWordListCache8 = null;
 let definitionsCache = {};
+
+// Past 7 mode + replay state (see §5.14)
+let past7Days = [];          // [{date, letter, secrets, bestScore, loaded}]
+let replaySecrets = [];
+let replayCommon = '';
+let replayRevealed, replayWrongPos, replayColumnReds;
+let replayGuesses = [];
+let replayLog = [];          // [{word, t}] sorted by t ascending
+let replayStep = 0;          // index of next guess to apply
+let replaySpeed = 1;         // 1, 2, or 4
+let replayPlaying = false;
+let replayTimeoutId = null;
+let currentReplayDayIdx = -1;
 ```
 
 ### 5.2 Lazy 8-letter lexicon loading
@@ -181,7 +201,7 @@ let definitionsCache = {};
 3. `!guess.includes(commonLetter)` → "Word must contain the common letter: X"
 4. `guesses.includes(guess)` → "You already guessed that word."
 
-On success: start the timer if not running, push the guess, increment the display, call `processGuess(guess)`, update keyboard colors, prepend an `<li>` to the appropriate history list (`#daily-guess-history` in daily, `#guess-history` in practice) that includes a hover tooltip `.guess-tooltip` whose content is fetched by `fetchDefinition(guess, tooltip)`. Re-render the board and check win condition.
+On success: start the timer if not running, capture `elapsedAtGuess = getElapsedSeconds()`, push the guess onto `guesses`, append `{word: guess, t: elapsedAtGuess}` onto `guessLog`, increment the display, call `processGuess(guess)`, update keyboard colors, prepend an `<li>` to the appropriate history list (`#daily-guess-history` in daily, `#guess-history` in practice) that includes a hover tooltip `.guess-tooltip` whose content is fetched by `fetchDefinition(guess, tooltip)`. Re-render the board and check win condition.
 
 `processGuess(guess)` does four passes across all `wordLen` rows:
 
@@ -266,9 +286,48 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 ### 5.13 Mode switching
 
-`switchMode(mode)` toggles the `.active` class on mode buttons, shows `#controls` only in practice, shows `#sidebar-history` only in practice, shows `#sidebar-scoreboard` only in daily, then calls `initDailyGame()` or `initGame()`, and updates the tagline via `updateGameTaglineText()`.
+`switchMode(mode)` first stops any in-flight replay if we're leaving Past 7 mode (`stopReplayTimer(); replayPlaying = false`). Then it toggles the `.active` class on all three mode buttons, shows `#controls` only in practice, shows `#sidebar-history` only in practice, shows `#sidebar-scoreboard` only in daily, and swaps `#game-play-area` with `#past7-section` via `style.display` for Past 7 vs. the other two modes. Finally it calls `initPast7()`, `initDailyGame()`, or `initGame()` as appropriate, then `updateGameTaglineText()` — which reads `'past7'` and emits "Relive the best solves from the past seven daily puzzles."
 
-`resetGameState()` clears all state arrays (sized by current `wordLen`), rebuilds column feedback DOM, clears input/history/board/keyboard classes, resets hint counts, stops timer, shows board, re-syncs `#guess-input.maxLength` and placeholder, and clears the fireworks overlay.
+`resetGameState()` clears all state arrays including `guessLog` (sized by current `wordLen`), rebuilds column feedback DOM, clears input/history/board/keyboard classes, resets hint counts, stops timer, shows board, re-syncs `#guess-input.maxLength` and placeholder, and clears the fireworks overlay.
+
+### 5.14 Past 7 mode & replay
+
+**Date selection.** `past7Dates()` returns 7 local-date strings going back from yesterday (not today) to 7 days ago, most recent first, in `YYYY-MM-DD` form.
+
+**Deterministic puzzle re-creation.** `seedForDateStr(dateStr)` re-implements the same date → seed hash used by `getDailySeed()` but parameterized by an arbitrary date string. `puzzleForDate(dateStr)` is a **pure** reimplementation of the daily picker that returns `{letter, secrets}` without touching any globals: seed `mulberry32`, shuffle the alphabet, pick the first letter whose 5k-Common filter has ≥50 candidates, then pick 7 words without replacement. This works because daily puzzles are always deterministic from the date.
+
+**Initialization** (`initPast7()`): stops any prior replay, hides `#past7-replay`, shows `#past7-grid`, builds `past7Days` by calling `puzzleForDate` for each date (marking `loaded:false`), renders the grid with a "Loading…" state, and — if `db` is available — kicks off one `fetchBestScoreForDay(day)` per day in parallel. Each fetch runs the same query as `fetchLeaderboard` but filtered to `day.date`, sorts the results by **fewest hints → fewest guesses → fastest time** (a fixed canonical "best" ordering, not tied to the scoreboard's toggle), and prefers the best-ranked score that has a non-empty `guess_log` (so replayable solves always win over equally-ranked ones without replay data). Each completion flips `day.loaded = true` and re-renders the grid.
+
+**Grid rendering** (`renderPast7Grid`). Each `.past7-card` shows the formatted short date, the common letter in large type, and either:
+- "Loading…" (muted) while `!day.loaded`;
+- the best player's nickname + `N guesses · mm:ss · K hint(s)` + the `.has-replay` class making the card clickable, if a replayable solve exists;
+- the best player's nickname + "No replay data" (muted) if there's a score but no `guess_log` (older data);
+- "No solves" (muted) if no one played that day.
+
+Only `.has-replay` cards are wired to `openReplay(idx)`.
+
+**Opening a replay** (`openReplay(dayIdx)`): stops any prior timer, copies `day.secrets` into `replaySecrets`, sets `replayCommon`, builds `replayLog` from the best score's `guess_log` (normalized to lowercase + sorted ascending by `t`), resets all replay board arrays, `replayStep = 0`, `replaySpeed = 1`, hides the grid, shows `#past7-replay`, renders the header with the player's nickname and stats, and renders an empty board + the full guess log (all rows start faded).
+
+**Replay rendering** (`renderReplayBoard`). Identical visuals to the live board but drawn into `#past7-replay-board`: seven `.word-row` rows each with seven `.letter-box` cells (green when revealed), a trailing `.wrong-position-feedback` grid for yellows, and a trailing `.column-feedback-row` with seven `.col-feedback` cells for reds. Completed rows also get a `.def-tooltip` fetched via `fetchDefinition(secret, tooltip)` (temporarily pinning `wordLen = 7` around the call so the tooltip's rank math uses the 7-letter lexicon even if the user was last in 8-letter practice mode). `renderReplayLog` rebuilds the `<ul>` of `.replay-log-entry` rows — those with index `< replayStep` get the `.played` class (full opacity + pale-blue background), the rest are faded.
+
+**Applying a guess** (`applyReplayGuess(guess)`). Mirrors `processGuess` exactly — greens, yellow add, row-local yellow prune (by letter count vs. revealed), global yellow prune (by fully-revealed-globally), and column-red recompute — but operates on the replay state arrays. This is a standalone duplicate rather than a refactor of `processGuess`, so the live-game code path is untouched and guaranteed stable.
+
+**Playback & scrubbing controls**:
+- `stepReplay()` advances `replayStep` by one, applies `replayLog[step-1]` incrementally to the board, and re-renders board + log.
+- `resetReplayBoardState()` — zeroes `replayRevealed` / `replayWrongPos` / `replayColumnReds` / `replayGuesses` and sets `replayStep = 0`. Used by `jumpReplayTo` and when `playReplay` restarts from the end.
+- `jumpReplayTo(step)` — the scrubber primitive. Pauses any active playback, resets the replay board state, then **replays guesses 0..step-1 in order** by calling `applyReplayGuess` on each (rather than trying to "un-apply"), sets `replayStep = step`, and re-renders. This is the correct way to step backward given that column-red / yellow-prune logic depends on the full history, not just the current revealed grid.
+- `replayStepForward()` / `replayStepBackward()` — thin wrappers that call `jumpReplayTo(replayStep ± 1)`.
+- Clicking any `.replay-log-entry` calls `jumpReplayTo(i + 1)` so the clicked guess becomes the `.current` entry (highlighted blue, with a 3px left bar) and the board reflects the state immediately after that guess.
+- `scheduleNextReplay()` sets a `setTimeout` whose delay is `clamp(0.35s, t_i - t_{i-1}, 4s) / replaySpeed` — so guesses made seconds apart play out at roughly their real cadence, but huge think-time gaps are capped at 4 seconds so the animation never stalls, and tiny gaps still get a minimum 0.35s so the user can see each step.
+- `playReplay()` — if already at end, calls `resetReplayBoardState()` + renders to start over; then sets `replayPlaying = true` and schedules the next step.
+- `pauseReplay()` — clears the timer and sets `replayPlaying = false`.
+- `toggleReplayPlayPause()` — bound to `#past7-replay-play`.
+- `cycleReplaySpeed()` — bound to `#past7-replay-speed`; cycles 1× → 2× → 4× → 1×. If the replay is currently playing, re-schedules the next step at the new speed.
+- `updateReplayControls()` — renders the play button as `▶ Play` when stopped mid-way, `⏸ Pause` while playing, or `↻ Replay` when at the end; renders the speed button as `Speed: N×`; and toggles `disabled` on `#past7-replay-prev` / `#past7-replay-next` when at the start / end of the log.
+
+**Controls layout** (`#past7-replay-controls` row, left to right): `⏮ Prev` · `▶ Play/⏸ Pause/↻ Replay` · `Next ⏭` · `Speed: 1×/2×/4×`. Below the control row sits a muted hint line ("Click any guess below to see the board at that point.") and then the guess log.
+
+**Back button** (`backToPast7Grid`): stops the timer, unsets `replayPlaying`, hides the replay panel and re-shows the grid. Always a clean return — no state is left over that would leak into the next day the user picks.
 
 ---
 
@@ -296,7 +355,25 @@ One collection: `daily_scores`. Each document:
   green_hints: number,
   yellow_hints: number,
   total_hints: number,         // convenience: green + yellow
+  guess_log: [                 // sequence of guesses with timestamps (used by Past 7 replay)
+    { word: 'preview', t: 12 },      // t = elapsed seconds when the guess was submitted
+    { word: 'present', t: 45 },
+    ...
+  ],
   timestamp: serverTimestamp()
+}
+```
+
+`guess_log` is built client-side by `handleGuess` and flushed at submit time. Older documents written before this field existed are tolerated: the Past 7 grid will show the solver's stats but mark the card "No replay data" (non-clickable).
+
+Recommended Firestore rule tweak if you previously restricted the writable field set:
+
+```
+match /daily_scores/{docId} {
+  allow create: if request.resource.data.keys().hasOnly(
+    ['date', 'nickname', 'time_seconds', 'guesses',
+     'green_hints', 'yellow_hints', 'total_hints',
+     'guess_log', 'timestamp']);
 }
 ```
 
@@ -308,7 +385,7 @@ One collection: `daily_scores`. Each document:
 - Aborts if `localStorage('daily_submitted_'+todayStr)` is already `'true'`.
 - `db.collection('daily_scores').add(scoreData)`; on success, set `dailySubmitted = true`, set the localStorage flag, and re-fetch the leaderboard. On failure, log + `showMessage('Error submitting score: ' + e.message)`.
 
-### 6.4 Leaderboard
+### 6.4 Leaderboard & Past 7 queries
 
 `fetchLeaderboard()` queries `db.collection('daily_scores').where('date','==',todayStr).get()`. On empty result it shows "No scores yet today. Be the first!". Otherwise, it sorts the scores client-side:
 
@@ -318,6 +395,8 @@ One collection: `daily_scores`. Each document:
 Renders a `<table class="scoreboard-table">` with columns `# | Name | Guesses | Time | Hints`. The Guesses/Time headers are clickable `.sort-header-btn` buttons (they set `secondarySortKey` and re-render); the active header gets a " ▼" appended. Only the top 10 are shown. Rows whose `nickname` matches the user's stored nickname get the `.my-score` class. If the user's rank is > 10, append `<p class="my-rank">Your rank: #N</p>` below the table.
 
 `escapeHtml(str)` uses the textContent/innerHTML trick for safety when rendering nicknames.
+
+**Past 7** uses the same collection. `fetchBestScoreForDay(day)` issues one `where('date','==',day.date)` query per past day (in parallel on page entry), then sorts **hints → guesses → time** and prefers the first result that has a non-empty `guess_log`. Queries are independent — one failure doesn't block the others; each `fetch` updates only its own card.
 
 ---
 
@@ -372,6 +451,8 @@ To recreate this project from scratch:
    - Keyboard-color priority: **black > cyan (finished but still needed) > yellow > green** — yellow wins ties with green.
    - The timer starts only on the first guess or hint.
    - Fireworks honor `prefers-reduced-motion`.
+   - Every valid guess must be appended to both `guesses` and `guessLog` (with elapsed seconds at that moment), and `guess_log` must be included in the Firestore submission payload — otherwise Past 7 replays will appear empty.
+   - `puzzleForDate(dateStr)` must be pure (no global writes) so Past 7 can derive yesterday's letter/secrets without clobbering the current game.
 7. Create a Firebase project, copy the web config into `firebase-config.js`, and add a `daily_scores` Firestore collection. Recommended security rules: allow `read` to anyone, allow `create` when the document schema validates and no `where('date', '==', today)` doc exists for that nickname (or accept spam — this project currently relies on the client-side `localStorage` flag).
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
 

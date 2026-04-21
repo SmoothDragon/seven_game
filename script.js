@@ -5,12 +5,13 @@ let revealedLetters = Array(7).fill(null).map(() => Array(7).fill(''));
 let wrongPositionLetters = Array(7).fill('');
 let columnRedLetters = Array(7).fill('');
 let guesses = [];
+let guessLog = []; // Array of { word, t } where t = elapsed seconds at time of guess
 let gameOver = false;
 let startTime;
 let timerInterval;
 let greenHintCount = 0;
 let yellowHintCount = 0;
-let gameMode = 'daily'; // 'daily' or 'practice'
+let gameMode = 'daily'; // 'daily' | 'practice' | 'past7'
 let dailySubmitted = false;
 let finalElapsedSeconds = 0;
 let paused = false;
@@ -88,6 +89,8 @@ function updateGameTaglineText() {
     if (!s) return;
     if (gameMode === 'daily') {
         s.textContent = 'Guess 7-letter words containing the common letter. Find all 7 secret words!';
+    } else if (gameMode === 'past7') {
+        s.textContent = 'Relive the best solves from the past seven daily puzzles.';
     } else {
         s.textContent = `Guess ${wordLen}-letter words containing the common letter. Find all ${wordLen} secret words!`;
     }
@@ -217,22 +220,38 @@ function togglePause() {
 // --- Mode Switching ---
 
 function switchMode(mode) {
+    if (gameMode === 'past7' && mode !== 'past7') {
+        stopReplayTimer();
+        replayPlaying = false;
+    }
     gameMode = mode;
-    
+
     document.getElementById('mode-daily').classList.toggle('active', mode === 'daily');
     document.getElementById('mode-practice').classList.toggle('active', mode === 'practice');
-    
+    document.getElementById('mode-past7').classList.toggle('active', mode === 'past7');
+
     // Show/hide controls based on mode
     document.getElementById('controls').style.display = mode === 'practice' ? 'flex' : 'none';
-    
+
     // Show/hide sidebars
     document.getElementById('sidebar-history').style.display = mode === 'practice' ? 'flex' : 'none';
     document.getElementById('sidebar-scoreboard').style.display = mode === 'daily' ? 'flex' : 'none';
 
-    if (mode === 'daily') {
-        initDailyGame();
+    // Swap between the live play area and the Past 7 section
+    const playArea = document.getElementById('game-play-area');
+    const past7Section = document.getElementById('past7-section');
+    if (mode === 'past7') {
+        if (playArea) playArea.style.display = 'none';
+        if (past7Section) past7Section.style.display = 'block';
+        initPast7();
     } else {
-        initGame();
+        if (playArea) playArea.style.display = '';
+        if (past7Section) past7Section.style.display = 'none';
+        if (mode === 'daily') {
+            initDailyGame();
+        } else {
+            initGame();
+        }
     }
     updateGameTaglineText();
 }
@@ -242,6 +261,7 @@ function switchMode(mode) {
 function resetGameState() {
     gameOver = false;
     guesses = [];
+    guessLog = [];
     revealedLetters = Array(wordLen).fill(null).map(() => Array(wordLen).fill(''));
     wrongPositionLetters = Array(wordLen).fill('');
     columnRedLetters = Array(wordLen).fill('');
@@ -424,6 +444,14 @@ function setupEventListeners() {
     // Mode toggle
     document.getElementById('mode-daily').addEventListener('click', () => switchMode('daily'));
     document.getElementById('mode-practice').addEventListener('click', () => switchMode('practice'));
+    document.getElementById('mode-past7').addEventListener('click', () => switchMode('past7'));
+
+    // Past 7 replay controls
+    document.getElementById('past7-back-btn').addEventListener('click', backToPast7Grid);
+    document.getElementById('past7-replay-prev').addEventListener('click', replayStepBackward);
+    document.getElementById('past7-replay-play').addEventListener('click', toggleReplayPlayPause);
+    document.getElementById('past7-replay-next').addEventListener('click', replayStepForward);
+    document.getElementById('past7-replay-speed').addEventListener('click', cycleReplaySpeed);
 
     // Splash / Rules
     const splash = document.getElementById('splash-overlay');
@@ -755,8 +783,10 @@ function handleGuess() {
     }
 
     startTimerIfNeeded();
-    
+
+    const elapsedAtGuess = getElapsedSeconds();
     guesses.push(guess);
+    guessLog.push({ word: guess, t: elapsedAtGuess });
     updateGuessCountDisplay();
     processGuess(guess);
     updateKeyboardColors();
@@ -1128,6 +1158,7 @@ async function submitScore(nickname) {
         green_hints: greenHintCount,
         yellow_hints: yellowHintCount,
         total_hints: greenHintCount + yellowHintCount,
+        guess_log: guessLog.map(g => ({ word: g.word, t: Math.max(0, Math.round(g.t)) })),
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
     };
 
@@ -1248,6 +1279,521 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// --- Past 7 Mode ---
+
+let past7Days = []; // [{ date, letter, secrets, bestScore }]
+let replaySecrets = [];
+let replayCommon = '';
+let replayRevealed = null;
+let replayWrongPos = null;
+let replayColumnReds = null;
+let replayGuesses = [];
+let replayLog = [];
+let replayStep = 0;
+let replaySpeed = 1;
+let replayPlaying = false;
+let replayTimeoutId = null;
+let currentReplayDayIdx = -1;
+
+function past7Dates() {
+    const arr = [];
+    const today = new Date();
+    for (let i = 1; i <= 7; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        arr.push(s);
+    }
+    return arr;
+}
+
+function seedForDateStr(dateStr) {
+    let hash = 0;
+    for (let i = 0; i < dateStr.length; i++) {
+        hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash;
+}
+
+/** Pure: derive common letter + 7 secret words for a given YYYY-MM-DD without touching globals. */
+function puzzleForDate(dateStr) {
+    const rng = mulberry32(seedForDateStr(dateStr));
+    const list = WORDS.slice(0, 5000);
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+
+    const indices = Array.from({ length: 26 }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+
+    let letter = 'e';
+    let candidates = [];
+    for (const idx of indices) {
+        const lt = alphabet[idx];
+        const filtered = list.filter(w => w.includes(lt));
+        if (filtered.length >= 50) {
+            letter = lt;
+            candidates = filtered;
+            break;
+        }
+    }
+    if (candidates.length === 0) {
+        candidates = list.filter(w => w.includes(letter));
+    }
+
+    const secrets = [];
+    const temp = [...candidates];
+    for (let i = 0; i < 7; i++) {
+        const ri = Math.floor(rng() * temp.length);
+        secrets.push(temp[ri]);
+        temp.splice(ri, 1);
+    }
+    return { letter, secrets };
+}
+
+function initPast7() {
+    stopReplayTimer();
+    replayPlaying = false;
+    currentReplayDayIdx = -1;
+
+    document.getElementById('past7-replay').classList.add('hidden');
+    document.getElementById('past7-grid').classList.remove('hidden');
+
+    const dates = past7Dates();
+    past7Days = dates.map(d => {
+        const { letter, secrets } = puzzleForDate(d);
+        return { date: d, letter, secrets, bestScore: null, loaded: false };
+    });
+
+    renderPast7Grid();
+
+    if (!db) {
+        past7Days.forEach(day => { day.loaded = true; });
+        renderPast7Grid();
+        return;
+    }
+    past7Days.forEach((day) => fetchBestScoreForDay(day));
+}
+
+async function fetchBestScoreForDay(day) {
+    try {
+        const snap = await db.collection('daily_scores').where('date', '==', day.date).get();
+        if (!snap.empty) {
+            const scores = [];
+            snap.forEach(doc => scores.push(doc.data()));
+            scores.sort((a, b) => {
+                const ha = (a.green_hints || 0) + (a.yellow_hints || 0);
+                const hb = (b.green_hints || 0) + (b.yellow_hints || 0);
+                if (ha !== hb) return ha - hb;
+                if (a.guesses !== b.guesses) return a.guesses - b.guesses;
+                return (a.time_seconds || 0) - (b.time_seconds || 0);
+            });
+            // Prefer the best-ranked score that has a replayable guess log
+            const withLog = scores.find(s => Array.isArray(s.guess_log) && s.guess_log.length > 0);
+            day.bestScore = withLog || scores[0];
+        }
+    } catch (e) {
+        console.error('Error fetching best score for', day.date, e);
+    } finally {
+        day.loaded = true;
+        renderPast7Grid();
+    }
+}
+
+function formatDateShort(dateStr) {
+    try {
+        return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
+            weekday: 'short', month: 'short', day: 'numeric'
+        });
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+function formatDateLong(dateStr) {
+    try {
+        return new Date(dateStr + 'T00:00:00').toLocaleDateString(undefined, {
+            weekday: 'long', month: 'long', day: 'numeric'
+        });
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+function renderPast7Grid() {
+    const grid = document.getElementById('past7-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    past7Days.forEach((day, idx) => {
+        const card = document.createElement('div');
+        card.className = 'past7-card';
+        card.dataset.idx = String(idx);
+
+        const best = day.bestScore;
+        const hasReplay = best && Array.isArray(best.guess_log) && best.guess_log.length > 0;
+
+        let statusHtml;
+        if (!day.loaded) {
+            statusHtml = '<div class="past7-card-best muted">Loading…</div>';
+        } else if (hasReplay) {
+            const m = String(Math.floor(best.time_seconds / 60)).padStart(2, '0');
+            const s = String(best.time_seconds % 60).padStart(2, '0');
+            const hints = (best.green_hints || 0) + (best.yellow_hints || 0);
+            statusHtml =
+                `<div class="past7-card-best"><strong>${escapeHtml(best.nickname)}</strong></div>` +
+                `<div class="past7-card-stats">${best.guesses} guesses · ${m}:${s} · ${hints} hint${hints === 1 ? '' : 's'}</div>`;
+            card.classList.add('has-replay');
+        } else if (best) {
+            statusHtml =
+                `<div class="past7-card-best"><strong>${escapeHtml(best.nickname)}</strong></div>` +
+                `<div class="past7-card-stats muted">No replay data</div>`;
+        } else {
+            statusHtml = '<div class="past7-card-best muted">No solves</div>';
+        }
+
+        card.innerHTML = `
+            <div class="past7-card-date">${formatDateShort(day.date)}</div>
+            <div class="past7-card-letter">${day.letter.toUpperCase()}</div>
+            ${statusHtml}
+        `;
+
+        if (hasReplay) {
+            card.addEventListener('click', () => openReplay(idx));
+        }
+        grid.appendChild(card);
+    });
+}
+
+function openReplay(dayIdx) {
+    const day = past7Days[dayIdx];
+    if (!day || !day.bestScore || !Array.isArray(day.bestScore.guess_log)) return;
+
+    stopReplayTimer();
+    currentReplayDayIdx = dayIdx;
+    replaySecrets = [...day.secrets];
+    replayCommon = day.letter;
+    replayLog = [...day.bestScore.guess_log]
+        .filter(g => g && typeof g.word === 'string')
+        .map(g => ({ word: g.word.toLowerCase(), t: Number(g.t) || 0 }))
+        .sort((a, b) => a.t - b.t);
+    replayRevealed = Array(7).fill(null).map(() => Array(7).fill(''));
+    replayWrongPos = Array(7).fill('');
+    replayColumnReds = Array(7).fill('');
+    replayGuesses = [];
+    replayStep = 0;
+    replayPlaying = false;
+    replaySpeed = 1;
+
+    document.getElementById('past7-grid').classList.add('hidden');
+    document.getElementById('past7-replay').classList.remove('hidden');
+
+    const best = day.bestScore;
+    const m = String(Math.floor(best.time_seconds / 60)).padStart(2, '0');
+    const s = String(best.time_seconds % 60).padStart(2, '0');
+    const hints = (best.green_hints || 0) + (best.yellow_hints || 0);
+    document.getElementById('past7-replay-header').innerHTML =
+        `<h3>${formatDateLong(day.date)}</h3>` +
+        `<p>Common letter: <strong class="past7-letter-inline">${day.letter.toUpperCase()}</strong> · ` +
+        `Best: <strong>${escapeHtml(best.nickname)}</strong> ` +
+        `(${best.guesses} guesses · ${m}:${s} · ${hints} hint${hints === 1 ? '' : 's'})</p>`;
+
+    renderReplayBoard();
+    renderReplayLog();
+    updateReplayControls();
+}
+
+function backToPast7Grid() {
+    stopReplayTimer();
+    replayPlaying = false;
+    currentReplayDayIdx = -1;
+    document.getElementById('past7-replay').classList.add('hidden');
+    document.getElementById('past7-grid').classList.remove('hidden');
+}
+
+function renderReplayBoard() {
+    const board = document.getElementById('past7-replay-board');
+    if (!board) return;
+    board.innerHTML = '';
+    board.dataset.wordLen = '7';
+
+    for (let i = 0; i < 7; i++) {
+        const row = document.createElement('div');
+        row.className = 'word-row';
+        let isCompleted = true;
+
+        for (let j = 0; j < 7; j++) {
+            const box = document.createElement('div');
+            box.className = 'letter-box';
+            if (replayRevealed[i][j]) {
+                box.textContent = replayRevealed[i][j];
+                box.classList.add('correct');
+            } else {
+                isCompleted = false;
+            }
+            row.appendChild(box);
+        }
+
+        if (isCompleted) {
+            row.classList.add('completed');
+            const tooltip = document.createElement('div');
+            tooltip.className = 'def-tooltip';
+            tooltip.innerHTML = '<em>Loading definition...</em>';
+            row.appendChild(tooltip);
+            const savedLen = wordLen;
+            wordLen = 7;
+            fetchDefinition(replaySecrets[i], tooltip);
+            wordLen = savedLen;
+        }
+
+        const feedback = document.createElement('div');
+        feedback.className = 'wrong-position-feedback';
+        feedback.innerHTML = replayWrongPos[i].split('').map(c => `<span>${c}</span>`).join('');
+        row.appendChild(feedback);
+
+        board.appendChild(row);
+    }
+
+    const colRow = document.createElement('div');
+    colRow.className = 'column-feedback-row';
+    colRow.dataset.wordLen = '7';
+
+    const colFeedback = document.createElement('div');
+    colFeedback.className = 'past7-col-feedback';
+    for (let j = 0; j < 7; j++) {
+        const cf = document.createElement('div');
+        cf.className = 'col-feedback';
+        cf.innerHTML = replayColumnReds[j].split('').map(c => `<span>${c}</span>`).join('');
+        colFeedback.appendChild(cf);
+    }
+    colRow.appendChild(colFeedback);
+
+    const spacer = document.createElement('div');
+    spacer.className = 'column-feedback-spacer';
+    spacer.setAttribute('aria-hidden', 'true');
+    colRow.appendChild(spacer);
+
+    board.appendChild(colRow);
+}
+
+function renderReplayLog() {
+    const logEl = document.getElementById('past7-replay-log');
+    if (!logEl) return;
+    logEl.innerHTML = '';
+
+    replayLog.forEach((g, i) => {
+        const li = document.createElement('li');
+        const tSec = Math.max(0, Math.round(g.t || 0));
+        const m = String(Math.floor(tSec / 60)).padStart(2, '0');
+        const s = String(tSec % 60).padStart(2, '0');
+        li.className = 'replay-log-entry';
+        if (i < replayStep) li.classList.add('played');
+        if (i === replayStep - 1) li.classList.add('current');
+        li.title = 'Click to jump the board to this guess';
+        li.innerHTML =
+            `<span class="replay-log-time">${m}:${s}</span>` +
+            `<span class="replay-log-word">${escapeHtml(g.word.toUpperCase())}</span>`;
+        li.addEventListener('click', () => jumpReplayTo(i + 1));
+        logEl.appendChild(li);
+    });
+}
+
+function resetReplayBoardState() {
+    replayRevealed = Array(7).fill(null).map(() => Array(7).fill(''));
+    replayWrongPos = Array(7).fill('');
+    replayColumnReds = Array(7).fill('');
+    replayGuesses = [];
+    replayStep = 0;
+}
+
+/** Rebuild the board as it was after applying the first `step` guesses (0 = empty). */
+function jumpReplayTo(step) {
+    if (replayPlaying) {
+        replayPlaying = false;
+        stopReplayTimer();
+    }
+    const target = Math.max(0, Math.min(step, replayLog.length));
+    resetReplayBoardState();
+    for (let i = 0; i < target; i++) {
+        const g = replayLog[i];
+        if (g && g.word) applyReplayGuess(g.word);
+    }
+    replayStep = target;
+    renderReplayBoard();
+    renderReplayLog();
+    updateReplayControls();
+}
+
+function replayStepForward() {
+    if (replayStep >= replayLog.length) return;
+    jumpReplayTo(replayStep + 1);
+}
+
+function replayStepBackward() {
+    if (replayStep <= 0) return;
+    jumpReplayTo(replayStep - 1);
+}
+
+function applyReplayGuess(guess) {
+    replayGuesses.push(guess);
+
+    for (let i = 0; i < 7; i++) {
+        const sw = replaySecrets[i];
+        for (let j = 0; j < 7; j++) {
+            if (guess[j] === sw[j]) replayRevealed[i][j] = guess[j];
+        }
+    }
+
+    for (let i = 0; i < 7; i++) {
+        const sw = replaySecrets[i];
+        const uniq = [...new Set(guess.split(''))];
+        for (const ch of uniq) {
+            if (sw.includes(ch) && !replayWrongPos[i].includes(ch)) {
+                replayWrongPos[i] += ch;
+            }
+        }
+        let filtered = '';
+        for (const ch of replayWrongPos[i]) {
+            const c1 = sw.split('').filter(c => c === ch).length;
+            const c2 = replayRevealed[i].filter(c => c === ch).length;
+            if (c2 < c1) filtered += ch;
+        }
+        replayWrongPos[i] = filtered.split('').sort().join('');
+    }
+
+    for (let i = 0; i < 7; i++) {
+        let filtered = '';
+        for (const ch of replayWrongPos[i]) {
+            let globally = true;
+            for (let w = 0; w < 7; w++) {
+                const c1 = replaySecrets[w].split('').filter(c => c === ch).length;
+                const c2 = replayRevealed[w].filter(c => c === ch).length;
+                if (c2 < c1) { globally = false; break; }
+            }
+            if (!globally) filtered += ch;
+        }
+        replayWrongPos[i] = filtered;
+    }
+
+    replayColumnReds = Array(7).fill('');
+    for (let j = 0; j < 7; j++) {
+        let allRevealed = true;
+        for (let i = 0; i < 7; i++) {
+            if (!replayRevealed[i][j]) { allRevealed = false; break; }
+        }
+        if (allRevealed) continue;
+
+        const guessedInCol = new Set();
+        for (const g of replayGuesses) guessedInCol.add(g[j]);
+
+        for (const letter of guessedInCol) {
+            let isYellowSomewhere = false;
+            for (let i = 0; i < 7; i++) {
+                if (replayWrongPos[i].includes(letter)) { isYellowSomewhere = true; break; }
+            }
+            if (!isYellowSomewhere) continue;
+
+            let isCorrectInCol = false;
+            for (let i = 0; i < 7; i++) {
+                if (replaySecrets[i][j] === letter) { isCorrectInCol = true; break; }
+            }
+            if (!isCorrectInCol && !replayColumnReds[j].includes(letter)) {
+                replayColumnReds[j] += letter;
+            }
+        }
+        replayColumnReds[j] = replayColumnReds[j].split('').sort().join('');
+    }
+}
+
+function stopReplayTimer() {
+    if (replayTimeoutId !== null) {
+        clearTimeout(replayTimeoutId);
+        replayTimeoutId = null;
+    }
+}
+
+function stepReplay() {
+    if (replayStep >= replayLog.length) return false;
+    const g = replayLog[replayStep];
+    if (g && g.word) applyReplayGuess(g.word);
+    replayStep++;
+    renderReplayBoard();
+    renderReplayLog();
+    return replayStep < replayLog.length;
+}
+
+function scheduleNextReplay() {
+    stopReplayTimer();
+    if (!replayPlaying) return;
+    if (replayStep >= replayLog.length) {
+        replayPlaying = false;
+        updateReplayControls();
+        return;
+    }
+    const current = replayLog[replayStep];
+    const prevT = replayStep > 0 ? (replayLog[replayStep - 1].t || 0) : 0;
+    const delta = Math.max(0, (current.t || 0) - prevT);
+    // Clamp so the replay stays watchable even if guesses were minutes apart
+    const ms = Math.min(4000, Math.max(350, delta * 1000)) / replaySpeed;
+    replayTimeoutId = setTimeout(() => {
+        if (!replayPlaying) return;
+        stepReplay();
+        scheduleNextReplay();
+    }, ms);
+}
+
+function playReplay() {
+    if (replayStep >= replayLog.length) {
+        resetReplayBoardState();
+        renderReplayBoard();
+        renderReplayLog();
+    }
+    replayPlaying = true;
+    updateReplayControls();
+    scheduleNextReplay();
+}
+
+function pauseReplay() {
+    replayPlaying = false;
+    stopReplayTimer();
+    updateReplayControls();
+}
+
+function toggleReplayPlayPause() {
+    if (replayPlaying) pauseReplay();
+    else playReplay();
+}
+
+function cycleReplaySpeed() {
+    const speeds = [1, 2, 4];
+    const idx = speeds.indexOf(replaySpeed);
+    replaySpeed = speeds[(idx + 1) % speeds.length];
+    updateReplayControls();
+    if (replayPlaying) scheduleNextReplay();
+}
+
+function updateReplayControls() {
+    const playBtn = document.getElementById('past7-replay-play');
+    if (playBtn) {
+        if (replayStep >= replayLog.length && !replayPlaying) {
+            playBtn.textContent = '↻ Replay';
+        } else {
+            playBtn.textContent = replayPlaying ? '⏸ Pause' : '▶ Play';
+        }
+    }
+    const speedBtn = document.getElementById('past7-replay-speed');
+    if (speedBtn) {
+        speedBtn.textContent = `Speed: ${replaySpeed}×`;
+        speedBtn.dataset.speed = String(replaySpeed);
+    }
+    const prevBtn = document.getElementById('past7-replay-prev');
+    if (prevBtn) prevBtn.disabled = replayStep <= 0;
+    const nextBtn = document.getElementById('past7-replay-next');
+    if (nextBtn) nextBtn.disabled = replayStep >= replayLog.length;
 }
 
 // --- Startup ---

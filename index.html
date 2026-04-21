@@ -12,6 +12,7 @@
     <div class="mode-toggle">
         <button id="mode-daily" class="mode-btn active">Daily Puzzle</button>
         <button id="mode-practice" class="mode-btn">Practice</button>
+        <button id="mode-past7" class="mode-btn">Past 7</button>
     </div>
 
     <div class="main-wrapper">
@@ -35,74 +36,99 @@
                 <button id="new-game-btn">New Game</button>
             </div>
 
-            <div class="game-header">
-                <div id="common-letter-display">Common Letter: <span id="common-letter"></span></div>
-                <div class="game-header-right">
-                    <div id="guess-count-display">Guesses: <span id="guess-count">0</span></div>
-                    <div id="timer-display">
-                        Time: <span id="timer">00:00</span>
-                        <button id="pause-btn" class="pause-btn" title="Pause">⏸</button>
+            <div id="game-play-area">
+                <div class="game-header">
+                    <div id="common-letter-display">Common Letter: <span id="common-letter"></span></div>
+                    <div class="game-header-right">
+                        <div id="guess-count-display">Guesses: <span id="guess-count">0</span></div>
+                        <div id="timer-display">
+                            Time: <span id="timer">00:00</span>
+                            <button id="pause-btn" class="pause-btn" title="Pause">⏸</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="board-wrap" id="board-wrap">
+                    <div id="game-board"></div>
+                    <div id="fireworks-overlay" class="fireworks-overlay hidden" aria-hidden="true"></div>
+                </div>
+
+                <div class="column-feedback-row" id="column-feedback-row">
+                    <div id="column-feedback"></div>
+                    <div class="column-feedback-spacer" aria-hidden="true"></div>
+                </div>
+
+                <div class="input-area">
+                    <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off"
+                        spellcheck="false" inputmode="none" autofocus>
+                    <button id="guess-btn">Guess</button>
+                </div>
+                <div class="hint-area">
+                    <button id="green-hint-btn" class="hint-btn green-hint">Green Hint (<span
+                            id="green-hint-count">0</span>)</button>
+                    <button id="yellow-hint-btn" class="hint-btn yellow-hint">Yellow Hint (<span
+                            id="yellow-hint-count">0</span>)</button>
+                </div>
+                <div id="message"></div>
+
+                <div id="keyboard">
+                    <div class="keyboard-row">
+                        <button class="key" data-key="q">Q</button>
+                        <button class="key" data-key="w">W</button>
+                        <button class="key" data-key="e">E</button>
+                        <button class="key" data-key="r">R</button>
+                        <button class="key" data-key="t">T</button>
+                        <button class="key" data-key="y">Y</button>
+                        <button class="key" data-key="u">U</button>
+                        <button class="key" data-key="i">I</button>
+                        <button class="key" data-key="o">O</button>
+                        <button class="key" data-key="p">P</button>
+                    </div>
+                    <div class="keyboard-row">
+                        <button class="key" data-key="a">A</button>
+                        <button class="key" data-key="s">S</button>
+                        <button class="key" data-key="d">D</button>
+                        <button class="key" data-key="f">F</button>
+                        <button class="key" data-key="g">G</button>
+                        <button class="key" data-key="h">H</button>
+                        <button class="key" data-key="j">J</button>
+                        <button class="key" data-key="k">K</button>
+                        <button class="key" data-key="l">L</button>
+                    </div>
+                    <div class="keyboard-row">
+                        <button class="key wide" data-key="Enter">ENTER</button>
+                        <button class="key" data-key="z">Z</button>
+                        <button class="key" data-key="x">X</button>
+                        <button class="key" data-key="c">C</button>
+                        <button class="key" data-key="v">V</button>
+                        <button class="key" data-key="b">B</button>
+                        <button class="key" data-key="n">N</button>
+                        <button class="key" data-key="m">M</button>
+                        <button class="key wide" data-key="Backspace">⌫</button>
                     </div>
                 </div>
             </div>
 
-            <div class="board-wrap" id="board-wrap">
-                <div id="game-board"></div>
-                <div id="fireworks-overlay" class="fireworks-overlay hidden" aria-hidden="true"></div>
-            </div>
-
-            <div class="column-feedback-row" id="column-feedback-row">
-                <div id="column-feedback"></div>
-                <div class="column-feedback-spacer" aria-hidden="true"></div>
-            </div>
-
-            <div class="input-area">
-                <input type="text" id="guess-input" maxlength="7" placeholder="Enter 7-letter word" autocomplete="off"
-                    spellcheck="false" inputmode="none" autofocus>
-                <button id="guess-btn">Guess</button>
-            </div>
-            <div class="hint-area">
-                <button id="green-hint-btn" class="hint-btn green-hint">Green Hint (<span
-                        id="green-hint-count">0</span>)</button>
-                <button id="yellow-hint-btn" class="hint-btn yellow-hint">Yellow Hint (<span
-                        id="yellow-hint-count">0</span>)</button>
-            </div>
-            <div id="message"></div>
-
-            <div id="keyboard">
-                <div class="keyboard-row">
-                    <button class="key" data-key="q">Q</button>
-                    <button class="key" data-key="w">W</button>
-                    <button class="key" data-key="e">E</button>
-                    <button class="key" data-key="r">R</button>
-                    <button class="key" data-key="t">T</button>
-                    <button class="key" data-key="y">Y</button>
-                    <button class="key" data-key="u">U</button>
-                    <button class="key" data-key="i">I</button>
-                    <button class="key" data-key="o">O</button>
-                    <button class="key" data-key="p">P</button>
+            <div id="past7-section" style="display:none;">
+                <h2 class="past7-title">Past 7 Days</h2>
+                <p class="past7-subtitle">Common letters from the last seven daily puzzles. Click a letter to replay the best solve.</p>
+                <div id="past7-grid" class="past7-grid">
+                    <p style="text-align:center; color:#888;">Loading…</p>
                 </div>
-                <div class="keyboard-row">
-                    <button class="key" data-key="a">A</button>
-                    <button class="key" data-key="s">S</button>
-                    <button class="key" data-key="d">D</button>
-                    <button class="key" data-key="f">F</button>
-                    <button class="key" data-key="g">G</button>
-                    <button class="key" data-key="h">H</button>
-                    <button class="key" data-key="j">J</button>
-                    <button class="key" data-key="k">K</button>
-                    <button class="key" data-key="l">L</button>
-                </div>
-                <div class="keyboard-row">
-                    <button class="key wide" data-key="Enter">ENTER</button>
-                    <button class="key" data-key="z">Z</button>
-                    <button class="key" data-key="x">X</button>
-                    <button class="key" data-key="c">C</button>
-                    <button class="key" data-key="v">V</button>
-                    <button class="key" data-key="b">B</button>
-                    <button class="key" data-key="n">N</button>
-                    <button class="key" data-key="m">M</button>
-                    <button class="key wide" data-key="Backspace">⌫</button>
+                <div id="past7-replay" class="past7-replay hidden">
+                    <button id="past7-back-btn" class="past7-back-btn">← Back to Past 7</button>
+                    <div id="past7-replay-header"></div>
+                    <div class="past7-replay-body">
+                        <div id="past7-replay-board"></div>
+                        <div id="past7-replay-controls">
+                            <button id="past7-replay-prev" class="past7-replay-btn">⏮ Prev</button>
+                            <button id="past7-replay-play" class="past7-replay-btn">▶ Play</button>
+                            <button id="past7-replay-next" class="past7-replay-btn">Next ⏭</button>
+                            <button id="past7-replay-speed" class="past7-replay-btn" data-speed="1">Speed: 1×</button>
+                        </div>
+                        <p class="past7-replay-hint">Click any guess below to see the board at that point.</p>
+                        <ul id="past7-replay-log" class="past7-replay-log"></ul>
+                    </div>
                 </div>
             </div>
         </div>
