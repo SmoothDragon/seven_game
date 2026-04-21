@@ -673,10 +673,12 @@ button.hint-btn:disabled {
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .mode-btn {
-    padding: 10px 24px;
+    padding: 10px 18px;
     font-size: 1em;
     font-weight: bold;
     border: 2px solid #007bff;
@@ -684,6 +686,14 @@ button.hint-btn:disabled {
     background-color: white;
     color: #007bff;
     transition: background-color 0.2s, color 0.2s;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 500px) {
+    .mode-btn {
+        padding: 8px 12px;
+        font-size: 0.9em;
+    }
 }
 
 .mode-btn:first-child {
@@ -940,8 +950,50 @@ button.hint-btn:disabled {
 .past7-subtitle {
     text-align: center;
     color: #666;
-    margin: 0 0 16px;
+    margin: 0 0 12px;
     font-size: 0.95em;
+}
+
+.past7-variant-toggle {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 16px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.past7-variant-btn {
+    padding: 6px 18px;
+    font-size: 0.9em;
+    font-weight: bold;
+    border: 2px solid #007bff;
+    cursor: pointer;
+    background-color: white;
+    color: #007bff;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.past7-variant-btn:first-child {
+    border-radius: 6px 0 0 6px;
+}
+
+.past7-variant-btn:last-child {
+    border-radius: 0 6px 6px 0;
+    border-left: none;
+}
+
+.past7-variant-btn.active {
+    background-color: #007bff;
+    color: white;
+}
+
+.past7-variant-btn:hover:not(.active) {
+    background-color: #e8f0fe;
 }
 
 .past7-grid {

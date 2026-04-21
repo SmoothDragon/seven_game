@@ -21,12 +21,15 @@ This document is a complete specification of the **Seven 7s** web game. It is wr
 
 ### Modes
 
-- **Daily Puzzle** — same for everyone on a given date, seeded from the current date. A scoreboard of today's finishers (nickname + time + guesses + hints) is shown in a sidebar, fetched from Firestore. Each submitted solve also stores the full sequence of guesses with timestamps so it can be replayed later (see Past 7 below).
+There are **four** top-level modes, exposed as buttons in `.mode-toggle`:
+
+- **Daily** — the classic daily puzzle. Same for everyone on a given date. Uses the *Common 5k* word list (`WORDS.slice(0, 5000)`). Seed is a hash of the local date string. Scores submit to the `daily_scores` Firestore collection. A scoreboard sidebar shows today's finishers.
+- **Daily WGPO** — a **second, independent** daily puzzle that uses the **full** 7-letter WGPO list (`WORDS`). Has its own leaderboard in a separate Firestore collection `daily_scores_wgpo`. Uses a different seed (`date + ':wgpo'`) and **is guaranteed to have a different common letter from the classic Daily on the same date** — the WGPO picker explicitly excludes the classic daily's letter from its alphabet search.
 - **Practice** — infinite random puzzles. The player chooses word length (7 or 8) and a difficulty:
   - *Common* — 5k most frequent words by usage.
   - *Probable* — 5k "most probable" words by Scrabble-tile likelihood.
   - *All* — full WGPO word list.
-- **Past 7** — read-only gallery of the seven preceding daily puzzles (yesterday back through seven days ago). Each day is shown as a card with its common letter and the best solve's stats. Clicking a card opens a replay of that player's guesses: the board animates guess-by-guess, and a log on the side lists `mm:ss  WORD` for each guess in order.
+- **Past 7** — read-only gallery of the seven preceding daily puzzles (yesterday back through seven days ago). A sub-toggle at the top of the section switches between the classic **Daily** and the **Daily WGPO** history — the two can be reviewed independently and are backed by the two separate Firestore collections. Each day is shown as a card with its common letter (unique per variant) and the best solve's stats. Clicking a card opens a replay of that player's guesses: the board animates guess-by-guess, and a log on the side lists `mm:ss  WORD` for each guess in order. Each guess is also clickable to scrub the board to that exact point, plus Prev / Play / Next / Speed controls.
 
 ---
 
@@ -64,7 +67,7 @@ There is no `package.json` — the game ships as plain static files. The only No
 
 One page, one `<body>`. Major elements, in order:
 
-1. **Mode toggle** (`.mode-toggle`) with three buttons: `#mode-daily`, `#mode-practice`, `#mode-past7` (the active one has the `.active` class). Only the first and last buttons have rounded outer corners; all non-first buttons share a left border with their neighbour (`border-left:none`).
+1. **Mode toggle** (`.mode-toggle`) with four buttons in order: `#mode-daily` ("Daily"), `#mode-daily-wgpo` ("Daily WGPO"), `#mode-practice` ("Practice"), `#mode-past7` ("Past 7"). The active one has the `.active` class. Only the first and last buttons have rounded outer corners; all non-first buttons share a left border with their neighbour (`border-left:none`). `.mode-toggle` uses `flex-wrap: wrap` so the row still fits on narrow phones, with reduced button padding under a `@media (max-width: 500px)` breakpoint.
 2. **`.main-wrapper`** containing:
    - **`.container`** — the playfield. Inside:
      - `<h1>Seven 7s</h1>`
@@ -82,6 +85,7 @@ One page, one `<body>`. Major elements, in order:
        - **`#keyboard`** — three `.keyboard-row`s containing `.key` buttons with `data-key` attributes: Q-W-E-R-T-Y-U-I-O-P, A-S-D-F-G-H-J-K-L, ENTER (`.key.wide data-key="Enter"`) + Z-X-C-V-B-N-M + Backspace (`.key.wide data-key="Backspace"` rendered as `⌫`).
      - **`#past7-section`** (hidden except in Past 7 mode) — contains:
        - `<h2 class="past7-title">Past 7 Days</h2>` and `.past7-subtitle` paragraph.
+       - `.past7-variant-toggle` — a two-button sub-toggle (`#past7-variant-common`, `#past7-variant-wgpo`) that flips the grid between the classic Daily history and the Daily WGPO history. The active button has `.active`.
        - `#past7-grid.past7-grid` — a CSS-grid of `.past7-card` tiles, one per past day.
        - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with `#past7-replay-board`, `#past7-replay-controls` (`#past7-replay-play`, `#past7-replay-speed`), and `ul#past7-replay-log.past7-replay-log`.
    - **Sidebars** (outside `.container` but inside `.main-wrapper`):
@@ -146,8 +150,9 @@ let gameOver = false;
 let startTime, timerInterval;
 let pausedElapsed = 0, paused = false;
 let greenHintCount = 0, yellowHintCount = 0;
-let gameMode = 'daily';      // 'daily' | 'practice' | 'past7'
-let dailySubmitted = false;  // whether the user already submitted a score today
+let gameMode = 'daily';      // 'daily' | 'daily_wgpo' | 'practice' | 'past7'
+let currentDailyVariant = 'common'; // 'common' | 'wgpo' — which daily leaderboard/collection to use
+let dailySubmitted = false;  // whether the user already submitted a score today (for the current variant)
 let finalElapsedSeconds = 0;
 let secondarySortKey = 'guesses';  // 'guesses' | 'time' — leaderboard sort toggle
 let wordLen = 7;             // 7 or 8
@@ -157,7 +162,8 @@ let probableWordListCache = null, probableWordListCache8 = null;
 let definitionsCache = {};
 
 // Past 7 mode + replay state (see §5.14)
-let past7Days = [];          // [{date, letter, secrets, bestScore, loaded}]
+let past7Variant = 'common'; // 'common' | 'wgpo' — which daily flavor the grid is showing
+let past7Days = [];          // [{date, letter, secrets, bestScore, loaded, variant}]
 let replaySecrets = [];
 let replayCommon = '';
 let replayRevealed, replayWrongPos, replayColumnReds;
@@ -184,13 +190,28 @@ let currentReplayDayIdx = -1;
 
 ### 5.4 Word picking
 
-`pickWordsWithRng(rng, wordList)` does:
+The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {letter, secrets}`:
 
 1. Build an array of 26 indices 0–25 and Fisher–Yates shuffle it with `rng`.
-2. For each letter in that shuffled alphabet, filter `wordList` for words containing it. The first letter for which `candidateWords.length >= 50` becomes `commonLetter` and its filtered list becomes the candidate pool.
-3. Pick `wordLen` words from the pool without replacement by repeatedly `splice`-ing a random index using `rng`.
+2. For each letter in that shuffled alphabet (skipping `excludeLetter` if given), filter `wordList` for words containing it. The first letter for which `candidateWords.length >= 50` becomes the puzzle's common letter; its filtered list becomes the candidate pool.
+3. Pick `wordCount` words from the pool without replacement by repeatedly `splice`-ing a random index using `rng`.
+4. Returns `{letter, secrets}`. Never mutates globals.
 
-`initDailyGame()` always uses `wordLen = 7` and the first 5,000 words of `WORDS` (the "Common" list), seeded with `getDailySeed()`. It also reads `localStorage.getItem('daily_submitted_' + todayStr)` to know if the user already submitted a score today (used to suppress the nickname modal). Finally it calls `fetchLeaderboard()`.
+`pickWordsWithRng(rng, wordList)` is a thin back-compat wrapper that calls `pickPuzzle` and writes the results into the `commonLetter` / `secretWords` globals. It's used by Practice mode only.
+
+**Daily variants.** The two daily puzzles are derived by:
+- `puzzleForDate(dateStr)` → `pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0,5000), 7, null)` — the **classic Daily**. The seed algorithm is the unchanged `seedForDateStr(dateStr)` so that `Past 7 → Daily` can still reconstruct every historical `daily_scores` puzzle exactly.
+- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter)` — the **Daily WGPO**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the WGPO daily's common letter is **never** the same as classic Daily's on the same day.
+- `puzzleForDateVariant(dateStr, variant)` is the single dispatcher used by both the live game init and Past 7.
+
+**Daily init.** `initDailyGame()` and `initDailyWgpoGame()` are thin aliases for `initDailyVariant('common'|'wgpo')`, which:
+
+1. Sets `currentDailyVariant = variant` and `wordLen = 7`.
+2. `resetGameState()` (clears arrays, timer, history, keyboard).
+3. Reads `localStorage.getItem(dailySubmittedKey(variant, todayStr))` into `dailySubmitted` — that key is `"daily_submitted_"+YYYY-MM-DD` for classic and `"daily_submitted_wgpo_"+YYYY-MM-DD` for WGPO, so submissions for the two variants are tracked independently.
+4. Calls `puzzleForDateVariant(todayStr, variant)`, copies the result into `commonLetter` + `secretWords`.
+5. Calls `updateScoreboardHeading(variant)` which rewrites the sidebar title between `"Today's Scoreboard"` and `"Today's WGPO Scoreboard"`.
+6. Renders the board, calls `fetchLeaderboard()` (which picks the right collection via `currentDailyVariant`), and focuses the input.
 
 `initGame()` (practice) is async. It reads `#practice-word-length` and, if 8, awaits `ensureWords8LexiconLoaded()` while showing a loading message. Then it picks the active word list based on `#difficulty` (common = first 5k, probable = 5k lowest Scrabble rank, all = full list), and picks the common letter + secrets the same way but with `Math.random()` (not seeded). If no letter has ≥50 candidates it falls back to `e`.
 
@@ -346,7 +367,14 @@ A module-level `let db = null` is created, and `initFirebase()`:
 
 ### 6.2 Firestore schema
 
-One collection: `daily_scores`. Each document:
+**Two parallel collections**, one per daily variant:
+
+- `daily_scores` — classic Daily leaderboard (unchanged historically).
+- `daily_scores_wgpo` — Daily WGPO leaderboard.
+
+Both have **identical** document shapes. The active collection is chosen at call sites via `dailyScoresCollection(currentDailyVariant)` (live game) or `dailyScoresCollection(day.variant)` (Past 7). Using separate collections — rather than a shared collection with a `variant` field — keeps Firestore queries trivial and avoids any migration of existing classic documents.
+
+Each document:
 
 ```js
 {
@@ -368,10 +396,17 @@ One collection: `daily_scores`. Each document:
 
 `guess_log` is built client-side by `handleGuess` and flushed at submit time. Older documents written before this field existed are tolerated: the Past 7 grid will show the solver's stats but mark the card "No replay data" (non-clickable).
 
-Recommended Firestore rule tweak if you previously restricted the writable field set:
+Recommended Firestore rule tweak if you previously restricted the writable field set — apply the **same** rule to both collections:
 
 ```
 match /daily_scores/{docId} {
+  allow create: if request.resource.data.keys().hasOnly(
+    ['date', 'nickname', 'time_seconds', 'guesses',
+     'green_hints', 'yellow_hints', 'total_hints',
+     'guess_log', 'timestamp']);
+}
+
+match /daily_scores_wgpo/{docId} {
   allow create: if request.resource.data.keys().hasOnly(
     ['date', 'nickname', 'time_seconds', 'guesses',
      'green_hints', 'yellow_hints', 'total_hints',
@@ -381,15 +416,15 @@ match /daily_scores/{docId} {
 
 ### 6.3 Submit flow
 
-`showNicknameModal()` → `saveNickname()` trims the value, stores it in localStorage, hides the modal, then `submitScore(nickname)`:
+`showNicknameModal()` → `saveNickname()` trims the value, stores it in localStorage, hides the modal, then `submitScore(nickname)`. The whole flow is variant-aware via `currentDailyVariant`:
 
 - Aborts with a warning if `db` is null.
-- Aborts if `localStorage('daily_submitted_'+todayStr)` is already `'true'`.
-- `db.collection('daily_scores').add(scoreData)`; on success, set `dailySubmitted = true`, set the localStorage flag, and re-fetch the leaderboard. On failure, log + `showMessage('Error submitting score: ' + e.message)`.
+- Aborts if `localStorage(dailySubmittedKey(currentDailyVariant, todayStr))` is already `'true'` — that key is `daily_submitted_<date>` for classic and `daily_submitted_wgpo_<date>` for WGPO, so the two variants have **independent** once-per-day locks.
+- Writes to `db.collection(dailyScoresCollection(currentDailyVariant))`; on success, set `dailySubmitted = true`, set the variant's localStorage flag, and re-fetch the leaderboard. On failure, log + `showMessage('Error submitting score: ' + e.message)`.
 
 ### 6.4 Leaderboard & Past 7 queries
 
-`fetchLeaderboard()` queries `db.collection('daily_scores').where('date','==',todayStr).get()`. On empty result it shows "No scores yet today. Be the first!". Otherwise, it sorts the scores client-side:
+`fetchLeaderboard()` reads `currentDailyVariant`, queries `db.collection(dailyScoresCollection(variant)).where('date','==',todayStr).get()`, and also calls `updateScoreboardHeading(variant)` so the sidebar title matches. On empty result it shows "No scores yet today. Be the first!". Otherwise, it sorts the scores client-side:
 
 - Primary ascending: `green_hints + yellow_hints` (fewer hints is better).
 - Secondary: when `secondarySortKey === 'time'`, by `time_seconds` then `guesses`; when `'guesses'` (default), by `guesses` then `time_seconds`.
@@ -398,7 +433,9 @@ Renders a `<table class="scoreboard-table">` with columns `# | Name | Guesses | 
 
 `escapeHtml(str)` uses the textContent/innerHTML trick for safety when rendering nicknames.
 
-**Past 7** uses the same collection. `fetchBestScoreForDay(day)` issues one `where('date','==',day.date)` query per past day (in parallel on page entry), then sorts **hints → guesses → time** and prefers the first result that has a non-empty `guess_log`. Queries are independent — one failure doesn't block the others; each `fetch` updates only its own card.
+**Past 7** reads from the collection that matches the currently selected `past7Variant` (`daily_scores` for Common, `daily_scores_wgpo` for WGPO). Each `day` built by `initPast7` is tagged with `day.variant` at construction time, and `fetchBestScoreForDay(day)` issues `db.collection(dailyScoresCollection(day.variant)).where('date','==',day.date).get()` — tagging per-day keeps late-arriving results from a prior variant harmless: if the user flips the toggle while fetches are in flight, `past7Days` is rebuilt and the orphaned `day` objects are no longer in the array, so their `day.loaded = true` update silently no-ops against the new grid. Results are sorted **hints → guesses → time**, preferring the first entry with a non-empty `guess_log`. Queries are independent — one failure doesn't block the others; each `fetch` updates only its own card.
+
+Flipping the sub-toggle inside `#past7-section` is handled by `switchPast7Variant(variant)`, which stops any running replay, updates the two buttons' `.active` classes via `updatePast7VariantButtons()`, and calls `initPast7()` again to rebuild the grid for the new variant.
 
 ---
 
@@ -454,8 +491,9 @@ To recreate this project from scratch:
    - The timer starts only on the first guess or hint.
    - Fireworks honor `prefers-reduced-motion`.
    - Every valid guess must be appended to both `guesses` and `guessLog` (with elapsed seconds at that moment), and `guess_log` must be included in the Firestore submission payload — otherwise Past 7 replays will appear empty.
-   - `puzzleForDate(dateStr)` must be pure (no global writes) so Past 7 can derive yesterday's letter/secrets without clobbering the current game.
-7. Create a Firebase project, copy the web config into `firebase-config.js`, and add a `daily_scores` Firestore collection. Recommended security rules: allow `read` to anyone, allow `create` when the document schema validates and no `where('date', '==', today)` doc exists for that nickname (or accept spam — this project currently relies on the client-side `localStorage` flag).
+   - `pickPuzzle`, `puzzleForDate`, and `puzzleWgpoForDate` must all be pure (no global writes) so Past 7 can derive any past day's letter/secrets for either variant without clobbering the current game. Classic Daily's seed must remain exactly `seedForDateStr(dateStr)` to preserve replay-compatibility with existing `daily_scores` documents.
+   - `puzzleWgpoForDate` must pass the classic day's common letter as `excludeLetter` to `pickPuzzle`, guaranteeing the two daily variants never share a letter on the same date.
+7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **two** Firestore collections: `daily_scores` (classic Daily) and `daily_scores_wgpo` (Daily WGPO). Apply the same security rules to both. Recommended: allow `read` to anyone, allow `create` when the document schema validates (see §6.2); the client already enforces one submission per user per variant per day via separate `localStorage` flags.
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
 
 ---

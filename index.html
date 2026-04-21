@@ -6,12 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Seven 7s</title>
     <!-- Bump ?v= on every release to cache-bust GitHub Pages. Keep all asset versions in sync. -->
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 
 <body>
     <div class="mode-toggle">
-        <button id="mode-daily" class="mode-btn active">Daily Puzzle</button>
+        <button id="mode-daily" class="mode-btn active">Daily</button>
+        <button id="mode-daily-wgpo" class="mode-btn">Daily WGPO</button>
         <button id="mode-practice" class="mode-btn">Practice</button>
         <button id="mode-past7" class="mode-btn">Past 7</button>
     </div>
@@ -113,6 +114,10 @@
             <div id="past7-section" style="display:none;">
                 <h2 class="past7-title">Past 7 Days</h2>
                 <p class="past7-subtitle">Common letters from the last seven daily puzzles. Click a letter to replay the best solve.</p>
+                <div class="past7-variant-toggle" role="tablist" aria-label="Daily variant">
+                    <button id="past7-variant-common" class="past7-variant-btn active" role="tab">Daily</button>
+                    <button id="past7-variant-wgpo" class="past7-variant-btn" role="tab">Daily WGPO</button>
+                </div>
                 <div id="past7-grid" class="past7-grid">
                     <p style="text-align:center; color:#888;">Loading…</p>
                 </div>
@@ -190,10 +195,10 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="words.js?v=2"></script>
-    <script src="scrabble_ranks.js?v=2"></script>
-    <script src="firebase-config.js?v=2"></script>
-    <script src="script.js?v=2"></script>
+    <script src="words.js?v=3"></script>
+    <script src="scrabble_ranks.js?v=3"></script>
+    <script src="firebase-config.js?v=3"></script>
+    <script src="script.js?v=3"></script>
 </body>
 
 </html>

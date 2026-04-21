@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '2';
+const ASSET_VERSION = '3';
 
 // Global state
 let secretWords = [];
@@ -15,7 +15,8 @@ let startTime;
 let timerInterval;
 let greenHintCount = 0;
 let yellowHintCount = 0;
-let gameMode = 'daily'; // 'daily' | 'practice' | 'past7'
+let gameMode = 'daily'; // 'daily' | 'daily_wgpo' | 'practice' | 'past7'
+let currentDailyVariant = 'common'; // 'common' (classic Daily) | 'wgpo' (Daily WGPO) — which daily we're currently playing/viewing
 let dailySubmitted = false;
 let finalElapsedSeconds = 0;
 let paused = false;
@@ -93,6 +94,8 @@ function updateGameTaglineText() {
     if (!s) return;
     if (gameMode === 'daily') {
         s.textContent = 'Guess 7-letter words containing the common letter. Find all 7 secret words!';
+    } else if (gameMode === 'daily_wgpo') {
+        s.textContent = 'Daily puzzle using the full WGPO 7-letter list. Find all 7 secret words!';
     } else if (gameMode === 'past7') {
         s.textContent = 'Relive the best solves from the past seven daily puzzles.';
     } else {
@@ -240,12 +243,14 @@ function switchMode(mode) {
     };
 
     toggleActive('mode-daily', mode === 'daily');
+    toggleActive('mode-daily-wgpo', mode === 'daily_wgpo');
     toggleActive('mode-practice', mode === 'practice');
     toggleActive('mode-past7', mode === 'past7');
 
+    const isDaily = mode === 'daily' || mode === 'daily_wgpo';
     setDisplay('controls', mode === 'practice' ? 'flex' : 'none');
     setDisplay('sidebar-history', mode === 'practice' ? 'flex' : 'none');
-    setDisplay('sidebar-scoreboard', mode === 'daily' ? 'flex' : 'none');
+    setDisplay('sidebar-scoreboard', isDaily ? 'flex' : 'none');
 
     // Swap between the live play area and the Past 7 section
     const playArea = document.getElementById('game-play-area');
@@ -259,6 +264,8 @@ function switchMode(mode) {
         if (past7Section) past7Section.style.display = 'none';
         if (mode === 'daily') {
             initDailyGame();
+        } else if (mode === 'daily_wgpo') {
+            initDailyWgpoGame();
         } else {
             initGame();
         }
@@ -308,53 +315,98 @@ function resetGameState() {
     clearFireworksOverlay();
 }
 
-function pickWordsWithRng(rng, wordList) {
+/**
+ * Pure puzzle derivation. Returns { letter, secrets } for a given seeded RNG and word list,
+ * without touching globals. `excludeLetter` optionally forces a specific letter to be skipped
+ * (used so Daily WGPO never picks the same common letter as classic Daily on the same date).
+ */
+function pickPuzzle(rng, wordList, wordCount, excludeLetter) {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    let candidateWords = [];
-    
-    let indices = Array.from({length: 26}, (_, i) => i);
+    const indices = Array.from({ length: 26 }, (_, i) => i);
     for (let i = indices.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [indices[i], indices[j]] = [indices[j], indices[i]];
     }
 
-    for (let idx of indices) {
-        const letter = alphabet[idx];
-        candidateWords = wordList.filter(w => w.includes(letter));
-        if (candidateWords.length >= 50) {
-            commonLetter = letter;
+    let letter = null;
+    let candidates = [];
+    for (const idx of indices) {
+        const lt = alphabet[idx];
+        if (excludeLetter && lt === excludeLetter) continue;
+        const filtered = wordList.filter(w => w.includes(lt));
+        if (filtered.length >= 50) {
+            letter = lt;
+            candidates = filtered;
             break;
         }
     }
-
-    secretWords = [];
-    let tempCandidates = [...candidateWords];
-    for (let i = 0; i < wordLen; i++) {
-        const randomIndex = Math.floor(rng() * tempCandidates.length);
-        secretWords.push(tempCandidates[randomIndex]);
-        tempCandidates.splice(randomIndex, 1);
+    if (letter === null) {
+        // Ultra-defensive fallback — should never trigger for 7-letter lists that contain 'e'
+        letter = excludeLetter === 'e' ? 'a' : 'e';
+        candidates = wordList.filter(w => w.includes(letter));
     }
+
+    const secrets = [];
+    const temp = [...candidates];
+    const n = Math.min(wordCount, temp.length);
+    for (let i = 0; i < n; i++) {
+        const ri = Math.floor(rng() * temp.length);
+        secrets.push(temp[ri]);
+        temp.splice(ri, 1);
+    }
+    return { letter, secrets };
+}
+
+/** Back-compat wrapper that writes results into globals (used by practice mode). */
+function pickWordsWithRng(rng, wordList) {
+    const result = pickPuzzle(rng, wordList, wordLen, null);
+    commonLetter = result.letter;
+    secretWords = result.secrets;
+}
+
+function dailySubmittedKey(variant, dateStr) {
+    return variant === 'wgpo'
+        ? `daily_submitted_wgpo_${dateStr}`
+        : `daily_submitted_${dateStr}`;
+}
+
+function dailyScoresCollection(variant) {
+    return variant === 'wgpo' ? 'daily_scores_wgpo' : 'daily_scores';
+}
+
+function updateScoreboardHeading(variant) {
+    const h = document.querySelector('#sidebar-scoreboard h3');
+    if (h) h.textContent = variant === 'wgpo' ? "Today's WGPO Scoreboard" : "Today's Scoreboard";
 }
 
 function initDailyGame() {
+    initDailyVariant('common');
+}
+
+function initDailyWgpoGame() {
+    initDailyVariant('wgpo');
+}
+
+function initDailyVariant(variant) {
+    currentDailyVariant = variant;
     wordLen = 7;
     resetGameState();
-    
+
     const todayStr = getTodayString();
-    dailySubmitted = localStorage.getItem(`daily_submitted_${todayStr}`) === 'true';
-    
-    const seed = getDailySeed();
-    const rng = mulberry32(seed);
-    const beginnerList = WORDS.slice(0, 5000);
-    
-    pickWordsWithRng(rng, beginnerList);
+    dailySubmitted = localStorage.getItem(dailySubmittedKey(variant, todayStr)) === 'true';
+
+    const puzzle = puzzleForDateVariant(todayStr, variant);
+    commonLetter = puzzle.letter;
+    secretWords = [...puzzle.secrets];
 
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
+    updateScoreboardHeading(variant);
     renderBoard();
     fetchLeaderboard();
-    
+
     setTimeout(() => {
-        document.getElementById('guess-input').focus();
+        const input = document.getElementById('guess-input');
+        if (input) input.focus();
     }, 100);
 }
 
@@ -465,8 +517,13 @@ function setupEventListeners() {
 
     // Mode toggle
     on('mode-daily', 'click', () => switchMode('daily'));
+    on('mode-daily-wgpo', 'click', () => switchMode('daily_wgpo'));
     on('mode-practice', 'click', () => switchMode('practice'));
     on('mode-past7', 'click', () => switchMode('past7'));
+
+    // Past 7 variant toggle (Common vs WGPO)
+    on('past7-variant-common', 'click', () => switchPast7Variant('common'));
+    on('past7-variant-wgpo', 'click', () => switchPast7Variant('wgpo'));
 
     // Past 7 replay controls
     on('past7-back-btn', 'click', backToPast7Grid);
@@ -815,7 +872,8 @@ function handleGuess() {
     processGuess(guess);
     updateKeyboardColors();
     
-    const historyId = gameMode === 'daily' ? 'daily-guess-history' : 'guess-history';
+    const isDailyMode = gameMode === 'daily' || gameMode === 'daily_wgpo';
+    const historyId = isDailyMode ? 'daily-guess-history' : 'guess-history';
     const historyList = document.getElementById(historyId);
     const li = document.createElement('li');
     li.textContent = guess;
@@ -1039,7 +1097,8 @@ function checkWinCondition() {
 
         launchFireworks();
 
-        if (gameMode === 'daily' && !dailySubmitted) {
+        const isDailyMode = gameMode === 'daily' || gameMode === 'daily_wgpo';
+        if (isDailyMode && !dailySubmitted) {
             showNicknameModal();
         } else {
             showMessage(`Congratulations! You found all ${wordLen} words!`);
@@ -1166,10 +1225,12 @@ async function submitScore(nickname) {
         showMessage("Scoreboard unavailable — Firebase not connected.");
         return false;
     }
-    
+
+    const variant = currentDailyVariant;
     const todayStr = getTodayString();
-    
-    if (localStorage.getItem(`daily_submitted_${todayStr}`) === 'true') {
+    const submittedKey = dailySubmittedKey(variant, todayStr);
+
+    if (localStorage.getItem(submittedKey) === 'true') {
         showMessage('You already submitted a score today!');
         return false;
     }
@@ -1187,11 +1248,11 @@ async function submitScore(nickname) {
     };
 
     try {
-        await db.collection('daily_scores').add(scoreData);
-        
+        await db.collection(dailyScoresCollection(variant)).add(scoreData);
+
         dailySubmitted = true;
-        localStorage.setItem(`daily_submitted_${todayStr}`, 'true');
-        
+        localStorage.setItem(submittedKey, 'true');
+
         fetchLeaderboard();
         return true;
     } catch (e) {
@@ -1213,12 +1274,13 @@ async function fetchLeaderboard() {
     }
     
     container.innerHTML = '<p style="text-align:center; color:#888;">Loading...</p>';
-    
+
+    const variant = currentDailyVariant;
     const todayStr = getTodayString();
     const myNickname = localStorage.getItem('seven_sevens_nickname') || '';
-    
+
     try {
-        const snapshot = await db.collection('daily_scores')
+        const snapshot = await db.collection(dailyScoresCollection(variant))
             .where('date', '==', todayStr)
             .get();
         
@@ -1307,6 +1369,7 @@ function escapeHtml(str) {
 
 // --- Past 7 Mode ---
 
+let past7Variant = 'common'; // 'common' | 'wgpo' — which daily flavor the Past 7 grid is showing
 let past7Days = []; // [{ date, letter, secrets, bestScore }]
 let replaySecrets = [];
 let replayCommon = '';
@@ -1342,41 +1405,44 @@ function seedForDateStr(dateStr) {
     return hash;
 }
 
-/** Pure: derive common letter + 7 secret words for a given YYYY-MM-DD without touching globals. */
+/**
+ * Pure: derive the classic "Daily" puzzle (Common 5k list) for a given YYYY-MM-DD
+ * without touching globals. Seed = hash of dateStr (unchanged — do not break the
+ * replay of older daily_scores documents).
+ */
 function puzzleForDate(dateStr) {
     const rng = mulberry32(seedForDateStr(dateStr));
-    const list = WORDS.slice(0, 5000);
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    return pickPuzzle(rng, WORDS.slice(0, 5000), 7, null);
+}
 
-    const indices = Array.from({ length: 26 }, (_, i) => i);
-    for (let i = indices.length - 1; i > 0; i--) {
-        const j = Math.floor(rng() * (i + 1));
-        [indices[i], indices[j]] = [indices[j], indices[i]];
-    }
+/**
+ * Pure: derive the "Daily WGPO" puzzle for a given YYYY-MM-DD. Uses the full
+ * WGPO 7-letter list, a different seed (date + ':wgpo') so the alphabet shuffle
+ * differs from classic, and **excludes** the classic daily's common letter so
+ * the two puzzles are guaranteed to have different common letters every day.
+ */
+function puzzleWgpoForDate(dateStr) {
+    const classic = puzzleForDate(dateStr);
+    const rng = mulberry32(seedForDateStr(dateStr + ':wgpo'));
+    return pickPuzzle(rng, WORDS, 7, classic.letter);
+}
 
-    let letter = 'e';
-    let candidates = [];
-    for (const idx of indices) {
-        const lt = alphabet[idx];
-        const filtered = list.filter(w => w.includes(lt));
-        if (filtered.length >= 50) {
-            letter = lt;
-            candidates = filtered;
-            break;
-        }
-    }
-    if (candidates.length === 0) {
-        candidates = list.filter(w => w.includes(letter));
-    }
+function puzzleForDateVariant(dateStr, variant) {
+    return variant === 'wgpo' ? puzzleWgpoForDate(dateStr) : puzzleForDate(dateStr);
+}
 
-    const secrets = [];
-    const temp = [...candidates];
-    for (let i = 0; i < 7; i++) {
-        const ri = Math.floor(rng() * temp.length);
-        secrets.push(temp[ri]);
-        temp.splice(ri, 1);
-    }
-    return { letter, secrets };
+function updatePast7VariantButtons() {
+    const c = document.getElementById('past7-variant-common');
+    const w = document.getElementById('past7-variant-wgpo');
+    if (c) c.classList.toggle('active', past7Variant === 'common');
+    if (w) w.classList.toggle('active', past7Variant === 'wgpo');
+}
+
+function switchPast7Variant(variant) {
+    if (past7Variant === variant) return;
+    past7Variant = variant;
+    updatePast7VariantButtons();
+    initPast7();
 }
 
 function initPast7() {
@@ -1386,11 +1452,13 @@ function initPast7() {
 
     document.getElementById('past7-replay').classList.add('hidden');
     document.getElementById('past7-grid').classList.remove('hidden');
+    updatePast7VariantButtons();
 
+    const variant = past7Variant;
     const dates = past7Dates();
     past7Days = dates.map(d => {
-        const { letter, secrets } = puzzleForDate(d);
-        return { date: d, letter, secrets, bestScore: null, loaded: false };
+        const { letter, secrets } = puzzleForDateVariant(d, variant);
+        return { date: d, letter, secrets, bestScore: null, loaded: false, variant };
     });
 
     renderPast7Grid();
@@ -1404,8 +1472,12 @@ function initPast7() {
 }
 
 async function fetchBestScoreForDay(day) {
+    // Each `day` object is tagged with its variant at build time. If the user flips
+    // the Past 7 variant toggle mid-fetch, past7Days is replaced wholesale and this
+    // stale `day` is no longer in the array — updating it is a harmless no-op.
     try {
-        const snap = await db.collection('daily_scores').where('date', '==', day.date).get();
+        const snap = await db.collection(dailyScoresCollection(day.variant))
+            .where('date', '==', day.date).get();
         if (!snap.empty) {
             const scores = [];
             snap.forEach(doc => scores.push(doc.data()));
