@@ -93,12 +93,14 @@ One page, one `<body>`. Major elements, in order:
    ```html
    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-   <script src="words.js"></script>
-   <script src="scrabble_ranks.js"></script>
-   <script src="firebase-config.js"></script>
-   <script src="script.js"></script>
+   <script src="words.js?v=2"></script>
+   <script src="scrabble_ranks.js?v=2"></script>
+   <script src="firebase-config.js?v=2"></script>
+   <script src="script.js?v=2"></script>
    ```
-   `words8.js` and `scrabble_ranks8.js` are **not** preloaded — they are fetched on demand by `script.js` the first time the user switches to 8-letter practice mode (see §5).
+   `words8.js` and `scrabble_ranks8.js` are **not** preloaded — they are fetched on demand by `script.js` the first time the user switches to 8-letter practice mode (see §5). The dynamic loader also appends `?v=${ASSET_VERSION}` to those filenames.
+
+**Cache-busting.** GitHub Pages serves static assets with a multi-minute `Cache-Control`, so without query-string versioning browsers will happily run a new `index.html` against a stale cached `script.js` — which presents as "button X exists but does nothing" (its click listener lives in the newer JS that never downloaded). To prevent this, every local asset URL carries `?v=N`, and `script.js` defines a matching `const ASSET_VERSION = 'N'`. **On every release, bump both**: the suffix on all `<link>` / `<script>` tags in `index.html` and the `ASSET_VERSION` constant at the top of `script.js`.
 
 ---
 
@@ -468,3 +470,4 @@ To recreate this project from scratch:
 - Error messages use the transient `#message` div with a 3-second clear timer in `showMessage(msg)`.
 - `escapeHtml` is used around any user-supplied string (`nickname`) before putting it into `innerHTML`.
 - Never block on Firestore: wrap every Firebase call in `try/catch`, degrade gracefully if `db` is null (e.g. "Firebase not configured" message in the scoreboard).
+- All event-listener setup in `setupEventListeners` goes through the small `on(id, event, handler)` helper, which null-checks the element and logs a warning instead of throwing. This means a stale cached `index.html` that's missing a newly-added button won't abort the rest of the listener setup — older controls keep working. `switchMode` uses the same null-safe pattern for its `classList.toggle` and `style.display` writes.

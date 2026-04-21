@@ -1,3 +1,7 @@
+// Bump this (and the matching ?v= suffixes in index.html) on every release so
+// GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
+const ASSET_VERSION = '2';
+
 // Global state
 let secretWords = [];
 let commonLetter = '';
@@ -55,8 +59,8 @@ function ensureWords8LexiconLoaded() {
     }
     if (!words8LexiconLoadPromise) {
         words8LexiconLoadPromise = (async () => {
-            await appendLexiconScript('words8.js');
-            await appendLexiconScript('scrabble_ranks8.js');
+            await appendLexiconScript(`words8.js?v=${ASSET_VERSION}`);
+            await appendLexiconScript(`scrabble_ranks8.js?v=${ASSET_VERSION}`);
         })();
     }
     return words8LexiconLoadPromise.catch((err) => {
@@ -226,16 +230,22 @@ function switchMode(mode) {
     }
     gameMode = mode;
 
-    document.getElementById('mode-daily').classList.toggle('active', mode === 'daily');
-    document.getElementById('mode-practice').classList.toggle('active', mode === 'practice');
-    document.getElementById('mode-past7').classList.toggle('active', mode === 'past7');
+    const toggleActive = (id, on) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('active', on);
+    };
+    const setDisplay = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = value;
+    };
 
-    // Show/hide controls based on mode
-    document.getElementById('controls').style.display = mode === 'practice' ? 'flex' : 'none';
+    toggleActive('mode-daily', mode === 'daily');
+    toggleActive('mode-practice', mode === 'practice');
+    toggleActive('mode-past7', mode === 'past7');
 
-    // Show/hide sidebars
-    document.getElementById('sidebar-history').style.display = mode === 'practice' ? 'flex' : 'none';
-    document.getElementById('sidebar-scoreboard').style.display = mode === 'daily' ? 'flex' : 'none';
+    setDisplay('controls', mode === 'practice' ? 'flex' : 'none');
+    setDisplay('sidebar-history', mode === 'practice' ? 'flex' : 'none');
+    setDisplay('sidebar-scoreboard', mode === 'daily' ? 'flex' : 'none');
 
     // Swap between the live play area and the Past 7 section
     const playArea = document.getElementById('game-play-area');
@@ -427,46 +437,60 @@ async function initGame() {
 
 // --- Event Listeners ---
 
+/** Null-safe addEventListener by id. Logs a warning and moves on if the element is missing
+ *  (e.g. when users have a stale cached index.html but a fresh script.js). */
+function on(id, event, handler) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener(event, handler);
+    } else {
+        console.warn(`[Seven 7s] #${id} not found — skipping ${event} handler. ` +
+            `Your index.html may be stale; try a hard refresh.`);
+    }
+}
+
 function setupEventListeners() {
     const input = document.getElementById('guess-input');
-    
-    document.getElementById('guess-btn').addEventListener('click', handleGuess);
-    document.getElementById('new-game-btn').addEventListener('click', initGame);
-    document.getElementById('difficulty').addEventListener('change', initGame);
-    document.getElementById('practice-word-length').addEventListener('change', initGame);
 
-    document.getElementById('green-hint-btn').addEventListener('click', useGreenHint);
-    document.getElementById('yellow-hint-btn').addEventListener('click', useYellowHint);
+    on('guess-btn', 'click', handleGuess);
+    on('new-game-btn', 'click', initGame);
+    on('difficulty', 'change', initGame);
+    on('practice-word-length', 'change', initGame);
+
+    on('green-hint-btn', 'click', useGreenHint);
+    on('yellow-hint-btn', 'click', useYellowHint);
 
     // Pause button
-    document.getElementById('pause-btn').addEventListener('click', togglePause);
+    on('pause-btn', 'click', togglePause);
 
     // Mode toggle
-    document.getElementById('mode-daily').addEventListener('click', () => switchMode('daily'));
-    document.getElementById('mode-practice').addEventListener('click', () => switchMode('practice'));
-    document.getElementById('mode-past7').addEventListener('click', () => switchMode('past7'));
+    on('mode-daily', 'click', () => switchMode('daily'));
+    on('mode-practice', 'click', () => switchMode('practice'));
+    on('mode-past7', 'click', () => switchMode('past7'));
 
     // Past 7 replay controls
-    document.getElementById('past7-back-btn').addEventListener('click', backToPast7Grid);
-    document.getElementById('past7-replay-prev').addEventListener('click', replayStepBackward);
-    document.getElementById('past7-replay-play').addEventListener('click', toggleReplayPlayPause);
-    document.getElementById('past7-replay-next').addEventListener('click', replayStepForward);
-    document.getElementById('past7-replay-speed').addEventListener('click', cycleReplaySpeed);
+    on('past7-back-btn', 'click', backToPast7Grid);
+    on('past7-replay-prev', 'click', replayStepBackward);
+    on('past7-replay-play', 'click', toggleReplayPlayPause);
+    on('past7-replay-next', 'click', replayStepForward);
+    on('past7-replay-speed', 'click', cycleReplaySpeed);
 
     // Splash / Rules
     const splash = document.getElementById('splash-overlay');
-    splash.addEventListener('click', function() {
-        splash.classList.add('hidden');
-        input.focus();
-    });
-    document.getElementById('rules-link').addEventListener('click', function(e) {
+    if (splash) {
+        splash.addEventListener('click', function() {
+            splash.classList.add('hidden');
+            if (input) input.focus();
+        });
+    }
+    on('rules-link', 'click', function(e) {
         e.preventDefault();
-        splash.classList.remove('hidden');
+        if (splash) splash.classList.remove('hidden');
     });
 
     // Nickname modal
-    document.getElementById('nickname-save-btn').addEventListener('click', saveNickname);
-    document.getElementById('nickname-input').addEventListener('keydown', function(e) {
+    on('nickname-save-btn', 'click', saveNickname);
+    on('nickname-input', 'keydown', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             saveNickname();
