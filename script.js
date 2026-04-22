@@ -1479,18 +1479,23 @@ async function fetchBestScoreForDay(day) {
         const snap = await db.collection(dailyScoresCollection(day.variant))
             .where('date', '==', day.date).get();
         if (!snap.empty) {
-            const scores = [];
-            snap.forEach(doc => scores.push(doc.data()));
-            scores.sort((a, b) => {
-                const ha = (a.green_hints || 0) + (a.yellow_hints || 0);
-                const hb = (b.green_hints || 0) + (b.yellow_hints || 0);
-                if (ha !== hb) return ha - hb;
+            // Only consider solves that used **zero hints** (no green hints, no yellow hints).
+            // Among those, rank by fewest guesses, with fastest time as the tiebreaker.
+            const zeroHintScores = [];
+            snap.forEach(doc => {
+                const s = doc.data();
+                const totalHints = (s.green_hints || 0) + (s.yellow_hints || 0);
+                if (totalHints === 0) zeroHintScores.push(s);
+            });
+            zeroHintScores.sort((a, b) => {
                 if (a.guesses !== b.guesses) return a.guesses - b.guesses;
                 return (a.time_seconds || 0) - (b.time_seconds || 0);
             });
-            // Prefer the best-ranked score that has a replayable guess log
-            const withLog = scores.find(s => Array.isArray(s.guess_log) && s.guess_log.length > 0);
-            day.bestScore = withLog || scores[0];
+            // Prefer the best-ranked zero-hint score that has a replayable guess log.
+            // If none of the zero-hint solves have a guess log, fall back to the top-ranked
+            // one (the card will render "No replay data" and be non-clickable).
+            const withLog = zeroHintScores.find(s => Array.isArray(s.guess_log) && s.guess_log.length > 0);
+            day.bestScore = withLog || zeroHintScores[0] || null;
         }
     } catch (e) {
         console.error('Error fetching best score for', day.date, e);
@@ -1537,19 +1542,19 @@ function renderPast7Grid() {
         if (!day.loaded) {
             statusHtml = '<div class="past7-card-best muted">Loading…</div>';
         } else if (hasReplay) {
+            // Best score is the best-ranked zero-hint solve that has a replayable guess log.
             const m = String(Math.floor(best.time_seconds / 60)).padStart(2, '0');
             const s = String(best.time_seconds % 60).padStart(2, '0');
-            const hints = (best.green_hints || 0) + (best.yellow_hints || 0);
             statusHtml =
                 `<div class="past7-card-best"><strong>${escapeHtml(best.nickname)}</strong></div>` +
-                `<div class="past7-card-stats">${best.guesses} guesses · ${m}:${s} · ${hints} hint${hints === 1 ? '' : 's'}</div>`;
+                `<div class="past7-card-stats">${best.guesses} guesses · ${m}:${s}</div>`;
             card.classList.add('has-replay');
         } else if (best) {
             statusHtml =
                 `<div class="past7-card-best"><strong>${escapeHtml(best.nickname)}</strong></div>` +
                 `<div class="past7-card-stats muted">No replay data</div>`;
         } else {
-            statusHtml = '<div class="past7-card-best muted">No solves</div>';
+            statusHtml = '<div class="past7-card-best muted">No hint-free solves</div>';
         }
 
         card.innerHTML = `
@@ -1591,12 +1596,11 @@ function openReplay(dayIdx) {
     const best = day.bestScore;
     const m = String(Math.floor(best.time_seconds / 60)).padStart(2, '0');
     const s = String(best.time_seconds % 60).padStart(2, '0');
-    const hints = (best.green_hints || 0) + (best.yellow_hints || 0);
     document.getElementById('past7-replay-header').innerHTML =
         `<h3>${formatDateLong(day.date)}</h3>` +
         `<p>Common letter: <strong class="past7-letter-inline">${day.letter.toUpperCase()}</strong> · ` +
         `Best: <strong>${escapeHtml(best.nickname)}</strong> ` +
-        `(${best.guesses} guesses · ${m}:${s} · ${hints} hint${hints === 1 ? '' : 's'})</p>`;
+        `(${best.guesses} guesses · ${m}:${s}, hint-free)</p>`;
 
     renderReplayBoard();
     renderReplayLog();
