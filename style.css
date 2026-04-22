@@ -1130,19 +1130,26 @@ button.hint-btn:disabled {
 #past7-replay-controls {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    align-items: center;
+    gap: 12px;
     flex-wrap: wrap;
 }
 
 .past7-replay-btn {
-    padding: 8px 16px;
-    font-size: 0.95em;
+    width: 40px;
+    height: 40px;
+    font-size: 1.1em;
     background-color: #007bff;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 50%;
     cursor: pointer;
     font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
 }
 
 .past7-replay-btn:hover:not(:disabled) {
@@ -1150,8 +1157,55 @@ button.hint-btn:disabled {
 }
 
 .past7-replay-btn:disabled {
-    opacity: 0.45;
+    opacity: 0.35;
     cursor: not-allowed;
+}
+
+.past7-replay-step {
+    font-variant-numeric: tabular-nums;
+    font-weight: bold;
+    color: #333;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* --- Replay diff highlighting: mark what changed at the current step --- */
+
+/* New green letter cells: extra glow + subtle scale */
+.letter-box.diff-new {
+    box-shadow: 0 0 0 3px #fff06a, 0 0 12px 2px rgba(255, 193, 7, 0.6);
+    animation: diff-pop 0.35s ease-out;
+    z-index: 1;
+}
+
+/* New yellow letters in the per-row feedback and new red letters in the column feedback */
+.wrong-position-feedback span.diff-new,
+.col-feedback span.diff-new {
+    outline: 2px solid #fff06a;
+    box-shadow: 0 0 8px 1px rgba(255, 193, 7, 0.7);
+    animation: diff-pop 0.35s ease-out;
+}
+
+@keyframes diff-pop {
+    0%   { transform: scale(1); }
+    50%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .letter-box.diff-new,
+    .wrong-position-feedback span.diff-new,
+    .col-feedback span.diff-new {
+        animation: none;
+    }
+}
+
+/* Faded "ghost" preview: show the current guess's letters in blank cells of
+ * unfinished rows so the viewer can see where each letter of the guess landed. */
+.letter-box.replay-ghost {
+    color: #b8b8b8;
+    font-weight: 400;
+    background-color: transparent;
 }
 
 .past7-replay-hint {

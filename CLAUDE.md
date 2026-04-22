@@ -24,12 +24,12 @@ This document is a complete specification of the **Seven 7s** web game. It is wr
 There are **four** top-level modes, exposed as buttons in `.mode-toggle`:
 
 - **Daily** — the classic daily puzzle. Same for everyone on a given date. Uses the *Common 5k* word list (`WORDS.slice(0, 5000)`). Seed is a hash of the local date string. Scores submit to the `daily_scores` Firestore collection. A scoreboard sidebar shows today's finishers.
-- **Daily WGPO** — a **second, independent** daily puzzle that uses the **full** 7-letter WGPO list (`WORDS`). Has its own leaderboard in a separate Firestore collection `daily_scores_wgpo`. Uses a different seed (`date + ':wgpo'`) and **is guaranteed to have a different common letter from the classic Daily on the same date** — the WGPO picker explicitly excludes the classic daily's letter from its alphabet search.
+- **Daily Hard** — a **second, independent** daily puzzle that uses the **full** 7-letter WGPO list (`WORDS`), including rare words excluded from the Common 5k list. Has its own leaderboard in a separate Firestore collection `daily_scores_wgpo`. Uses a different seed (`date + ':wgpo'`) and **is guaranteed to have a different common letter from the classic Daily on the same date** — the picker explicitly excludes the classic daily's letter from its alphabet search. (Internal identifier is `'wgpo'` everywhere — variant id, collection name, seed salt, DOM element ids, function names — to stay backward-compatible with existing data from when the mode was called "Daily WGPO". Only the display label changed.)
 - **Practice** — infinite random puzzles. The player chooses word length (7 or 8) and a difficulty:
   - *Common* — 5k most frequent words by usage.
   - *Probable* — 5k "most probable" words by Scrabble-tile likelihood.
   - *All* — full WGPO word list.
-- **Past 7** — read-only gallery of the seven preceding daily puzzles (yesterday back through seven days ago). A sub-toggle at the top of the section switches between the classic **Daily** and the **Daily WGPO** history — the two can be reviewed independently and are backed by the two separate Firestore collections. Each day is shown as a card with its common letter (unique per variant) and the best solve's stats. Clicking a card opens a replay of that player's guesses: the board animates guess-by-guess, and a log on the side lists `mm:ss  WORD` for each guess in order. Each guess is also clickable to scrub the board to that exact point, plus Prev / Play / Next / Speed controls.
+- **Past 7** — read-only gallery of the seven preceding daily puzzles (yesterday back through seven days ago). A sub-toggle at the top of the section switches between the classic **Daily** and the **Daily Hard** history — the two can be reviewed independently and are backed by the two separate Firestore collections. Each day is shown as a card with its common letter (unique per variant) and the best solve's stats. Clicking a card opens a **move-by-move viewer** of that player's guesses: the board is redrawn for each step and the cells/letters that the currently-viewed guess produced are visually highlighted (bright glow + pop animation). The viewer is step-based (no real-time playback) — just `◀` and `▶` arrow buttons with a `step / total` counter, keyboard `←` / `→` shortcuts, and a side log listing `mm:ss  WORD` for every guess; clicking any guess in the log jumps to the board state right after it. Unfinished rows also show the current guess's letters as faded "ghosts" so the viewer can see where each letter landed, whether it became a green, a yellow, or was pruned.
 
 ---
 
@@ -67,7 +67,7 @@ There is no `package.json` — the game ships as plain static files. The only No
 
 One page, one `<body>`. Major elements, in order:
 
-1. **Mode toggle** (`.mode-toggle`) with four buttons in order: `#mode-daily` ("Daily"), `#mode-daily-wgpo` ("Daily WGPO"), `#mode-practice` ("Practice"), `#mode-past7` ("Past 7"). The active one has the `.active` class. Only the first and last buttons have rounded outer corners; all non-first buttons share a left border with their neighbour (`border-left:none`). `.mode-toggle` uses `flex-wrap: wrap` so the row still fits on narrow phones, with reduced button padding under a `@media (max-width: 500px)` breakpoint.
+1. **Mode toggle** (`.mode-toggle`) with four buttons in order: `#mode-daily` ("Daily"), `#mode-daily-wgpo` ("Daily Hard"), `#mode-practice` ("Practice"), `#mode-past7` ("Past 7"). The active one has the `.active` class. Only the first and last buttons have rounded outer corners; all non-first buttons share a left border with their neighbour (`border-left:none`). `.mode-toggle` uses `flex-wrap: wrap` so the row still fits on narrow phones, with reduced button padding under a `@media (max-width: 500px)` breakpoint.
 2. **`.main-wrapper`** containing:
    - **`.container`** — the playfield. Inside:
      - `<h1>Seven 7s</h1>`
@@ -85,9 +85,9 @@ One page, one `<body>`. Major elements, in order:
        - **`#keyboard`** — three `.keyboard-row`s containing `.key` buttons with `data-key` attributes: Q-W-E-R-T-Y-U-I-O-P, A-S-D-F-G-H-J-K-L, ENTER (`.key.wide data-key="Enter"`) + Z-X-C-V-B-N-M + Backspace (`.key.wide data-key="Backspace"` rendered as `⌫`).
      - **`#past7-section`** (hidden except in Past 7 mode) — contains:
        - `<h2 class="past7-title">Past 7 Days</h2>` and `.past7-subtitle` paragraph.
-       - `.past7-variant-toggle` — a two-button sub-toggle (`#past7-variant-common`, `#past7-variant-wgpo`) that flips the grid between the classic Daily history and the Daily WGPO history. The active button has `.active`.
+       - `.past7-variant-toggle` — a two-button sub-toggle (`#past7-variant-common` labelled "Daily", `#past7-variant-wgpo` labelled "Daily Hard") that flips the grid between the classic Daily history and the Daily Hard history. The active button has `.active`.
        - `#past7-grid.past7-grid` — a CSS-grid of `.past7-card` tiles, one per past day.
-       - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with `#past7-replay-board`, `#past7-replay-controls` (`#past7-replay-play`, `#past7-replay-speed`), and `ul#past7-replay-log.past7-replay-log`.
+       - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with `#past7-replay-board`, `#past7-replay-controls` (just `#past7-replay-prev` (`◀`) + `#past7-replay-step` (counter) + `#past7-replay-next` (`▶`) — circular buttons, no autoplay / speed controls), a hint paragraph, and `ul#past7-replay-log.past7-replay-log`.
    - **Sidebars** (outside `.container` but inside `.main-wrapper`):
      - `#sidebar-history` (`.sidebar.history`, only visible in practice mode, `display:none` by default) containing `<h3>Guess History</h3>` and `<ul id="guess-history">`.
      - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) with `<h3>Today's Scoreboard</h3>`, `#scoreboard-list`, and a `.daily-history-section` with `<h4>Your Guesses</h4>` + `<ul id="daily-guess-history">`.
@@ -169,10 +169,8 @@ let replayCommon = '';
 let replayRevealed, replayWrongPos, replayColumnReds;
 let replayGuesses = [];
 let replayLog = [];          // [{word, t}] sorted by t ascending
-let replayStep = 0;          // index of next guess to apply
-let replaySpeed = 1;         // 1, 2, or 4
-let replayPlaying = false;
-let replayTimeoutId = null;
+let replayStep = 0;          // index of next guess to apply (i.e. how many have been played)
+let replayDiff = null;       // {newGreens, newYellows, newReds, guessWord} — what the most recent step produced
 let currentReplayDayIdx = -1;
 ```
 
@@ -201,16 +199,16 @@ The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {
 
 **Daily variants.** The two daily puzzles are derived by:
 - `puzzleForDate(dateStr)` → `pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0,5000), 7, null)` — the **classic Daily**. The seed algorithm is the unchanged `seedForDateStr(dateStr)` so that `Past 7 → Daily` can still reconstruct every historical `daily_scores` puzzle exactly.
-- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter)` — the **Daily WGPO**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the WGPO daily's common letter is **never** the same as classic Daily's on the same day.
+- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter)` — the **Daily Hard**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the Hard daily's common letter is **never** the same as classic Daily's on the same day. (Function and seed-salt names keep the `wgpo` token — they're internal identifiers from when the mode was called "Daily WGPO" and must stay stable so existing `daily_scores_wgpo` puzzles still reconstruct correctly.)
 - `puzzleForDateVariant(dateStr, variant)` is the single dispatcher used by both the live game init and Past 7.
 
 **Daily init.** `initDailyGame()` and `initDailyWgpoGame()` are thin aliases for `initDailyVariant('common'|'wgpo')`, which:
 
 1. Sets `currentDailyVariant = variant` and `wordLen = 7`.
 2. `resetGameState()` (clears arrays, timer, history, keyboard).
-3. Reads `localStorage.getItem(dailySubmittedKey(variant, todayStr))` into `dailySubmitted` — that key is `"daily_submitted_"+YYYY-MM-DD` for classic and `"daily_submitted_wgpo_"+YYYY-MM-DD` for WGPO, so submissions for the two variants are tracked independently.
+3. Reads `localStorage.getItem(dailySubmittedKey(variant, todayStr))` into `dailySubmitted` — that key is `"daily_submitted_"+YYYY-MM-DD` for classic and `"daily_submitted_wgpo_"+YYYY-MM-DD` for Daily Hard, so submissions for the two variants are tracked independently.
 4. Calls `puzzleForDateVariant(todayStr, variant)`, copies the result into `commonLetter` + `secretWords`.
-5. Calls `updateScoreboardHeading(variant)` which rewrites the sidebar title between `"Today's Scoreboard"` and `"Today's WGPO Scoreboard"`.
+5. Calls `updateScoreboardHeading(variant)` which rewrites the sidebar title between `"Today's Scoreboard"` and `"Today's Hard Scoreboard"`.
 6. Renders the board, calls `fetchLeaderboard()` (which picks the right collection via `currentDailyVariant`), and focuses the input.
 
 `initGame()` (practice) is async. It reads `#practice-word-length` and, if 8, awaits `ensureWords8LexiconLoaded()` while showing a loading message. Then it picks the active word list based on `#difficulty` (common = first 5k, probable = 5k lowest Scrabble rank, all = full list), and picks the common letter + secrets the same way but with `Math.random()` (not seeded). If no letter has ≥50 candidates it falls back to `e`.
@@ -309,7 +307,7 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 ### 5.13 Mode switching
 
-`switchMode(mode)` first stops any in-flight replay if we're leaving Past 7 mode (`stopReplayTimer(); replayPlaying = false`). Then it toggles the `.active` class on all three mode buttons, shows `#controls` only in practice, shows `#sidebar-history` only in practice, shows `#sidebar-scoreboard` only in daily, and swaps `#game-play-area` with `#past7-section` via `style.display` for Past 7 vs. the other two modes. Finally it calls `initPast7()`, `initDailyGame()`, or `initGame()` as appropriate, then `updateGameTaglineText()` — which reads `'past7'` and emits "Relive the best solves from the past seven daily puzzles."
+`switchMode(mode)` toggles the `.active` class on all four mode buttons, shows `#controls` only in practice, shows `#sidebar-history` only in practice, shows `#sidebar-scoreboard` for both daily variants, and swaps `#game-play-area` with `#past7-section` via `style.display` for Past 7 vs. the other modes. Finally it calls `initPast7()`, `initDailyGame()`, `initDailyWgpoGame()`, or `initGame()` as appropriate, then `updateGameTaglineText()`. No playback-timer bookkeeping is needed — the Past 7 viewer is purely step-driven.
 
 `resetGameState()` clears all state arrays including `guessLog` (sized by current `wordLen`), rebuilds column feedback DOM, clears input/history/board/keyboard classes, resets hint counts, stops timer, shows board, re-syncs `#guess-input.maxLength` and placeholder, and clears the fireworks overlay.
 
@@ -329,28 +327,32 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 Only `.has-replay` cards are wired to `openReplay(idx)`.
 
-**Opening a replay** (`openReplay(dayIdx)`): stops any prior timer, copies `day.secrets` into `replaySecrets`, sets `replayCommon`, builds `replayLog` from the best score's `guess_log` (normalized to lowercase + sorted ascending by `t`), resets all replay board arrays, `replayStep = 0`, `replaySpeed = 1`, hides the grid, shows `#past7-replay`, renders the header with the player's nickname and stats, and renders an empty board + the full guess log (all rows start faded).
+**Opening a replay** (`openReplay(dayIdx)`): copies `day.secrets` into `replaySecrets`, sets `replayCommon`, builds `replayLog` from the best score's `guess_log` (normalized to lowercase + sorted ascending by `t`), calls `resetReplayBoardState()` (clears revealed/yellow/red arrays + `replayGuesses` + `replayStep = 0`), nulls `replayDiff`, hides the grid, shows `#past7-replay`, renders the header with the player's nickname and stats, and renders an empty board + the full guess log (all rows start faded).
 
 **Replay rendering** (`renderReplayBoard`). Identical visuals to the live board but drawn into `#past7-replay-board`: seven `.word-row` rows each with seven `.letter-box` cells (green when revealed), a trailing `.wrong-position-feedback` grid for yellows, and a trailing `.column-feedback-row` with seven `.col-feedback` cells for reds. Completed rows also get a `.def-tooltip` fetched via `fetchDefinition(secret, tooltip)` (temporarily pinning `wordLen = 7` around the call so the tooltip's rank math uses the 7-letter lexicon even if the user was last in 8-letter practice mode). `renderReplayLog` rebuilds the `<ul>` of `.replay-log-entry` rows — those with index `< replayStep` get the `.played` class (full opacity + pale-blue background), the rest are faded.
 
 **Applying a guess** (`applyReplayGuess(guess)`). Mirrors `processGuess` exactly — greens, yellow add, row-local yellow prune (by letter count vs. revealed), global yellow prune (by fully-revealed-globally), and column-red recompute — but operates on the replay state arrays. This is a standalone duplicate rather than a refactor of `processGuess`, so the live-game code path is untouched and guaranteed stable.
 
-**Playback & scrubbing controls**:
-- `stepReplay()` advances `replayStep` by one, applies `replayLog[step-1]` incrementally to the board, and re-renders board + log.
-- `resetReplayBoardState()` — zeroes `replayRevealed` / `replayWrongPos` / `replayColumnReds` / `replayGuesses` and sets `replayStep = 0`. Used by `jumpReplayTo` and when `playReplay` restarts from the end.
-- `jumpReplayTo(step)` — the scrubber primitive. Pauses any active playback, resets the replay board state, then **replays guesses 0..step-1 in order** by calling `applyReplayGuess` on each (rather than trying to "un-apply"), sets `replayStep = step`, and re-renders. This is the correct way to step backward given that column-red / yellow-prune logic depends on the full history, not just the current revealed grid.
+**Step-based navigation** (no real-time playback):
+- `resetReplayBoardState()` — zeroes `replayRevealed` / `replayWrongPos` / `replayColumnReds` / `replayGuesses` and sets `replayStep = 0`. Used by `jumpReplayTo` and `openReplay`.
+- `snapshotReplayState()` — returns a shallow-but-independent copy of `{revealed, wrongPos, columnReds}` so before/after comparisons can be made without aliasing.
+- `computeReplayDiff(before, after, guessWord)` — returns `{newGreens: Set<"r,c">, newYellows: Set<"r,letter">, newReds: Set<"c,letter">, guessWord}`. These sets are exactly what the most recently applied guess produced.
+- `jumpReplayTo(step)` — the scrubber primitive. Clamps `step` into `[0, replayLog.length]`, calls `resetReplayBoardState()`, replays guesses `0..step-2` in order by calling `applyReplayGuess` on each (rather than trying to "un-apply" — the column-red / yellow-prune logic depends on the full history). For the final step it takes a `before` snapshot, applies the guess, takes an `after` snapshot, and stores `replayDiff = computeReplayDiff(before, after, word)`. When `step === 0`, `replayDiff` is cleared. Finally sets `replayStep = target` and re-renders.
 - `replayStepForward()` / `replayStepBackward()` — thin wrappers that call `jumpReplayTo(replayStep ± 1)`.
-- Clicking any `.replay-log-entry` calls `jumpReplayTo(i + 1)` so the clicked guess becomes the `.current` entry (highlighted blue, with a 3px left bar) and the board reflects the state immediately after that guess.
-- `scheduleNextReplay()` sets a `setTimeout` whose delay is `clamp(0.35s, t_i - t_{i-1}, 4s) / replaySpeed` — so guesses made seconds apart play out at roughly their real cadence, but huge think-time gaps are capped at 4 seconds so the animation never stalls, and tiny gaps still get a minimum 0.35s so the user can see each step.
-- `playReplay()` — if already at end, calls `resetReplayBoardState()` + renders to start over; then sets `replayPlaying = true` and schedules the next step.
-- `pauseReplay()` — clears the timer and sets `replayPlaying = false`.
-- `toggleReplayPlayPause()` — bound to `#past7-replay-play`.
-- `cycleReplaySpeed()` — bound to `#past7-replay-speed`; cycles 1× → 2× → 4× → 1×. If the replay is currently playing, re-schedules the next step at the new speed.
-- `updateReplayControls()` — renders the play button as `▶ Play` when stopped mid-way, `⏸ Pause` while playing, or `↻ Replay` when at the end; renders the speed button as `Speed: N×`; and toggles `disabled` on `#past7-replay-prev` / `#past7-replay-next` when at the start / end of the log.
+- Clicking any `.replay-log-entry` calls `jumpReplayTo(i + 1)` so the clicked guess becomes the `.current` entry (highlighted blue, with a 3px left bar) and the board reflects the state immediately after that guess — **including** the diff highlight.
+- Keyboard: while the replay panel is visible (`gameMode === 'past7'` and `#past7-replay` is not `.hidden`), `ArrowLeft` and `ArrowRight` step the viewer backward/forward.
+- `updateReplayControls()` — toggles `disabled` on `#past7-replay-prev` / `#past7-replay-next` at the endpoints and writes the `#past7-replay-step` counter as `"${replayStep} / ${replayLog.length}"`.
 
-**Controls layout** (`#past7-replay-controls` row, left to right): `⏮ Prev` · `▶ Play/⏸ Pause/↻ Replay` · `Next ⏭` · `Speed: 1×/2×/4×`. Below the control row sits a muted hint line ("Click any guess below to see the board at that point.") and then the guess log.
+**Diff highlighting in `renderReplayBoard`**. When `replayDiff` is non-null:
+- Revealed cells `(i, j)` whose `"${i},${j}"` is in `newGreens` get an extra `.diff-new` class — a bright yellow outer glow plus a brief `diff-pop` scale animation.
+- Per-row yellow `<span>`s whose `(row, letter)` is in `newYellows` get the same `.diff-new` class (outline + shadow + pop).
+- Per-column red `<span>`s whose `(col, letter)` is in `newReds` get the same treatment.
+- Additionally, for rows that are **not** yet fully revealed, blank cells render the current guess's letter at that column as a faded-grey `.replay-ghost` — so the viewer can see exactly which letter of the guess landed in each position, even if that column was pruned to nothing.
+- When the viewer is at step 0 (`replayDiff === null`), none of the highlighting or ghost letters appear — the board is an empty 7×7 grid, matching the pre-game state.
 
-**Back button** (`backToPast7Grid`): stops the timer, unsets `replayPlaying`, hides the replay panel and re-shows the grid. Always a clean return — no state is left over that would leak into the next day the user picks.
+**Controls layout** (`#past7-replay-controls` row, centered): `◀` · `N / M` counter · `▶`. The arrow buttons are 40px circular blue buttons; the counter is a bold tabular-nums span. Below sits a muted hint line ("Step through guesses with the arrows, or click any guess below to jump to it.") and then the guess log.
+
+**Back button** (`backToPast7Grid`): clears `currentReplayDayIdx` and `replayDiff`, hides the replay panel and re-shows the grid. No timers to stop; no playback state to tear down.
 
 ---
 
@@ -370,7 +372,7 @@ A module-level `let db = null` is created, and `initFirebase()`:
 **Two parallel collections**, one per daily variant:
 
 - `daily_scores` — classic Daily leaderboard (unchanged historically).
-- `daily_scores_wgpo` — Daily WGPO leaderboard.
+- `daily_scores_wgpo` — Daily Hard leaderboard. (Collection name keeps the historical `wgpo` token so existing documents remain valid; the mode is displayed in the UI as "Daily Hard".)
 
 Both have **identical** document shapes. The active collection is chosen at call sites via `dailyScoresCollection(currentDailyVariant)` (live game) or `dailyScoresCollection(day.variant)` (Past 7). Using separate collections — rather than a shared collection with a `variant` field — keeps Firestore queries trivial and avoids any migration of existing classic documents.
 
@@ -419,7 +421,7 @@ match /daily_scores_wgpo/{docId} {
 `showNicknameModal()` → `saveNickname()` trims the value, stores it in localStorage, hides the modal, then `submitScore(nickname)`. The whole flow is variant-aware via `currentDailyVariant`:
 
 - Aborts with a warning if `db` is null.
-- Aborts if `localStorage(dailySubmittedKey(currentDailyVariant, todayStr))` is already `'true'` — that key is `daily_submitted_<date>` for classic and `daily_submitted_wgpo_<date>` for WGPO, so the two variants have **independent** once-per-day locks.
+- Aborts if `localStorage(dailySubmittedKey(currentDailyVariant, todayStr))` is already `'true'` — that key is `daily_submitted_<date>` for classic and `daily_submitted_wgpo_<date>` for Daily Hard, so the two variants have **independent** once-per-day locks.
 - Writes to `db.collection(dailyScoresCollection(currentDailyVariant))`; on success, set `dailySubmitted = true`, set the variant's localStorage flag, and re-fetch the leaderboard. On failure, log + `showMessage('Error submitting score: ' + e.message)`.
 
 ### 6.4 Leaderboard & Past 7 queries
@@ -433,7 +435,7 @@ Renders a `<table class="scoreboard-table">` with columns `# | Name | Guesses | 
 
 `escapeHtml(str)` uses the textContent/innerHTML trick for safety when rendering nicknames.
 
-**Past 7** reads from the collection that matches the currently selected `past7Variant` (`daily_scores` for Common, `daily_scores_wgpo` for WGPO). Each `day` built by `initPast7` is tagged with `day.variant` at construction time, and `fetchBestScoreForDay(day)` issues `db.collection(dailyScoresCollection(day.variant)).where('date','==',day.date).get()` — tagging per-day keeps late-arriving results from a prior variant harmless: if the user flips the toggle while fetches are in flight, `past7Days` is rebuilt and the orphaned `day` objects are no longer in the array, so their `day.loaded = true` update silently no-ops against the new grid.
+**Past 7** reads from the collection that matches the currently selected `past7Variant` (`daily_scores` for Common, `daily_scores_wgpo` for Daily Hard). Each `day` built by `initPast7` is tagged with `day.variant` at construction time, and `fetchBestScoreForDay(day)` issues `db.collection(dailyScoresCollection(day.variant)).where('date','==',day.date).get()` — tagging per-day keeps late-arriving results from a prior variant harmless: if the user flips the toggle while fetches are in flight, `past7Days` is rebuilt and the orphaned `day` objects are no longer in the array, so their `day.loaded = true` update silently no-ops against the new grid.
 
 **Best-score selection** for a Past 7 card is deliberately stricter than the live daily scoreboard's sort. Only solves that used **zero hints** (green + yellow = 0) are eligible; they are then ranked **fewest guesses → fastest time**. The displayed best is the **best-ranked zero-hint solve that has a non-empty `guess_log`** — the Past 7 card is primarily a replay surface, so non-replayable entries are skipped so the card always opens something watchable. If every zero-hint solve for that day lacks a guess log, we fall back to the top-ranked zero-hint solve and the card renders "No replay data" (non-clickable). If no zero-hint solve exists at all, `day.bestScore` stays `null` and the card renders "No hint-free solves". Queries are independent — one failure doesn't block the others; each `fetch` updates only its own card.
 
@@ -495,7 +497,7 @@ To recreate this project from scratch:
    - Every valid guess must be appended to both `guesses` and `guessLog` (with elapsed seconds at that moment), and `guess_log` must be included in the Firestore submission payload — otherwise Past 7 replays will appear empty.
    - `pickPuzzle`, `puzzleForDate`, and `puzzleWgpoForDate` must all be pure (no global writes) so Past 7 can derive any past day's letter/secrets for either variant without clobbering the current game. Classic Daily's seed must remain exactly `seedForDateStr(dateStr)` to preserve replay-compatibility with existing `daily_scores` documents.
    - `puzzleWgpoForDate` must pass the classic day's common letter as `excludeLetter` to `pickPuzzle`, guaranteeing the two daily variants never share a letter on the same date.
-7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **two** Firestore collections: `daily_scores` (classic Daily) and `daily_scores_wgpo` (Daily WGPO). Apply the same security rules to both. Recommended: allow `read` to anyone, allow `create` when the document schema validates (see §6.2); the client already enforces one submission per user per variant per day via separate `localStorage` flags.
+7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **two** Firestore collections: `daily_scores` (classic Daily) and `daily_scores_wgpo` (Daily Hard). Apply the same security rules to both. Recommended: allow `read` to anyone, allow `create` when the document schema validates (see §6.2); the client already enforces one submission per user per variant per day via separate `localStorage` flags.
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
 
 ---

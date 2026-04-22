@@ -6,13 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Seven 7s</title>
     <!-- Bump ?v= on every release to cache-bust GitHub Pages. Keep all asset versions in sync. -->
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 
 <body>
     <div class="mode-toggle">
         <button id="mode-daily" class="mode-btn active">Daily</button>
-        <button id="mode-daily-wgpo" class="mode-btn">Daily WGPO</button>
+        <button id="mode-daily-wgpo" class="mode-btn">Daily Hard</button>
         <button id="mode-practice" class="mode-btn">Practice</button>
         <button id="mode-past7" class="mode-btn">Past 7</button>
     </div>
@@ -116,7 +116,7 @@
                 <p class="past7-subtitle">Common letters from the last seven daily puzzles. Click a letter to replay the best solve.</p>
                 <div class="past7-variant-toggle" role="tablist" aria-label="Daily variant">
                     <button id="past7-variant-common" class="past7-variant-btn active" role="tab">Daily</button>
-                    <button id="past7-variant-wgpo" class="past7-variant-btn" role="tab">Daily WGPO</button>
+                    <button id="past7-variant-wgpo" class="past7-variant-btn" role="tab">Daily Hard</button>
                 </div>
                 <div id="past7-grid" class="past7-grid">
                     <p style="text-align:center; color:#888;">Loading…</p>
@@ -127,12 +127,11 @@
                     <div class="past7-replay-body">
                         <div id="past7-replay-board"></div>
                         <div id="past7-replay-controls">
-                            <button id="past7-replay-prev" class="past7-replay-btn">⏮ Prev</button>
-                            <button id="past7-replay-play" class="past7-replay-btn">▶ Play</button>
-                            <button id="past7-replay-next" class="past7-replay-btn">Next ⏭</button>
-                            <button id="past7-replay-speed" class="past7-replay-btn" data-speed="1">Speed: 1×</button>
+                            <button id="past7-replay-prev" class="past7-replay-btn" aria-label="Previous guess" title="Previous guess">◀</button>
+                            <span id="past7-replay-step" class="past7-replay-step" aria-live="polite">0 / 0</span>
+                            <button id="past7-replay-next" class="past7-replay-btn" aria-label="Next guess" title="Next guess">▶</button>
                         </div>
-                        <p class="past7-replay-hint">Click any guess below to see the board at that point.</p>
+                        <p class="past7-replay-hint">Step through guesses with the arrows, or click any guess below to jump to it.</p>
                         <ul id="past7-replay-log" class="past7-replay-log"></ul>
                     </div>
                 </div>
@@ -195,10 +194,10 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="words.js?v=3"></script>
-    <script src="scrabble_ranks.js?v=3"></script>
-    <script src="firebase-config.js?v=3"></script>
-    <script src="script.js?v=3"></script>
+    <script src="words.js?v=5"></script>
+    <script src="scrabble_ranks.js?v=5"></script>
+    <script src="firebase-config.js?v=5"></script>
+    <script src="script.js?v=5"></script>
 </body>
 
 </html>

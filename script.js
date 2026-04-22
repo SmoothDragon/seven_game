@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '3';
+const ASSET_VERSION = '5';
 
 // Global state
 let secretWords = [];
@@ -16,7 +16,7 @@ let timerInterval;
 let greenHintCount = 0;
 let yellowHintCount = 0;
 let gameMode = 'daily'; // 'daily' | 'daily_wgpo' | 'practice' | 'past7'
-let currentDailyVariant = 'common'; // 'common' (classic Daily) | 'wgpo' (Daily WGPO) — which daily we're currently playing/viewing
+let currentDailyVariant = 'common'; // 'common' (classic Daily) | 'wgpo' (Daily Hard — id kept 'wgpo' for backward compatibility with existing daily_scores_wgpo documents)
 let dailySubmitted = false;
 let finalElapsedSeconds = 0;
 let paused = false;
@@ -95,7 +95,7 @@ function updateGameTaglineText() {
     if (gameMode === 'daily') {
         s.textContent = 'Guess 7-letter words containing the common letter. Find all 7 secret words!';
     } else if (gameMode === 'daily_wgpo') {
-        s.textContent = 'Daily puzzle using the full WGPO 7-letter list. Find all 7 secret words!';
+        s.textContent = 'Daily Hard — harder daily puzzle drawn from the full 7-letter word list. Find all 7 secret words!';
     } else if (gameMode === 'past7') {
         s.textContent = 'Relive the best solves from the past seven daily puzzles.';
     } else {
@@ -227,10 +227,6 @@ function togglePause() {
 // --- Mode Switching ---
 
 function switchMode(mode) {
-    if (gameMode === 'past7' && mode !== 'past7') {
-        stopReplayTimer();
-        replayPlaying = false;
-    }
     gameMode = mode;
 
     const toggleActive = (id, on) => {
@@ -318,7 +314,7 @@ function resetGameState() {
 /**
  * Pure puzzle derivation. Returns { letter, secrets } for a given seeded RNG and word list,
  * without touching globals. `excludeLetter` optionally forces a specific letter to be skipped
- * (used so Daily WGPO never picks the same common letter as classic Daily on the same date).
+ * (used so Daily Hard never picks the same common letter as classic Daily on the same date).
  */
 function pickPuzzle(rng, wordList, wordCount, excludeLetter) {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
@@ -376,7 +372,7 @@ function dailyScoresCollection(variant) {
 
 function updateScoreboardHeading(variant) {
     const h = document.querySelector('#sidebar-scoreboard h3');
-    if (h) h.textContent = variant === 'wgpo' ? "Today's WGPO Scoreboard" : "Today's Scoreboard";
+    if (h) h.textContent = variant === 'wgpo' ? "Today's Hard Scoreboard" : "Today's Scoreboard";
 }
 
 function initDailyGame() {
@@ -521,16 +517,23 @@ function setupEventListeners() {
     on('mode-practice', 'click', () => switchMode('practice'));
     on('mode-past7', 'click', () => switchMode('past7'));
 
-    // Past 7 variant toggle (Common vs WGPO)
+    // Past 7 variant toggle (Common vs Hard)
     on('past7-variant-common', 'click', () => switchPast7Variant('common'));
     on('past7-variant-wgpo', 'click', () => switchPast7Variant('wgpo'));
 
     // Past 7 replay controls
     on('past7-back-btn', 'click', backToPast7Grid);
     on('past7-replay-prev', 'click', replayStepBackward);
-    on('past7-replay-play', 'click', toggleReplayPlayPause);
     on('past7-replay-next', 'click', replayStepForward);
-    on('past7-replay-speed', 'click', cycleReplaySpeed);
+
+    // Keyboard shortcuts: ← / → step through the replay when it's visible
+    document.addEventListener('keydown', (e) => {
+        const replayVisible = gameMode === 'past7'
+            && !document.getElementById('past7-replay')?.classList.contains('hidden');
+        if (!replayVisible) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); replayStepBackward(); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); replayStepForward(); }
+    });
 
     // Splash / Rules
     const splash = document.getElementById('splash-overlay');
@@ -1379,9 +1382,9 @@ let replayColumnReds = null;
 let replayGuesses = [];
 let replayLog = [];
 let replayStep = 0;
-let replaySpeed = 1;
-let replayPlaying = false;
-let replayTimeoutId = null;
+// Cells/letters produced by the current step (step N). Used to highlight what
+// changed on the board with the most recently played guess. Null when replayStep === 0.
+let replayDiff = null; // { newGreens: Set<"r,c">, newYellows: Set<"r,letter">, newReds: Set<"c,letter">, guessWord: string }
 let currentReplayDayIdx = -1;
 
 function past7Dates() {
@@ -1416,10 +1419,12 @@ function puzzleForDate(dateStr) {
 }
 
 /**
- * Pure: derive the "Daily WGPO" puzzle for a given YYYY-MM-DD. Uses the full
+ * Pure: derive the "Daily Hard" puzzle for a given YYYY-MM-DD. Uses the full
  * WGPO 7-letter list, a different seed (date + ':wgpo') so the alphabet shuffle
  * differs from classic, and **excludes** the classic daily's common letter so
  * the two puzzles are guaranteed to have different common letters every day.
+ * (Internal identifier kept as `wgpo` for backward compatibility with the
+ * existing `daily_scores_wgpo` Firestore collection; user-facing label is "Daily Hard".)
  */
 function puzzleWgpoForDate(dateStr) {
     const classic = puzzleForDate(dateStr);
@@ -1446,9 +1451,8 @@ function switchPast7Variant(variant) {
 }
 
 function initPast7() {
-    stopReplayTimer();
-    replayPlaying = false;
     currentReplayDayIdx = -1;
+    replayDiff = null;
 
     document.getElementById('past7-replay').classList.add('hidden');
     document.getElementById('past7-grid').classList.remove('hidden');
@@ -1574,7 +1578,6 @@ function openReplay(dayIdx) {
     const day = past7Days[dayIdx];
     if (!day || !day.bestScore || !Array.isArray(day.bestScore.guess_log)) return;
 
-    stopReplayTimer();
     currentReplayDayIdx = dayIdx;
     replaySecrets = [...day.secrets];
     replayCommon = day.letter;
@@ -1582,13 +1585,8 @@ function openReplay(dayIdx) {
         .filter(g => g && typeof g.word === 'string')
         .map(g => ({ word: g.word.toLowerCase(), t: Number(g.t) || 0 }))
         .sort((a, b) => a.t - b.t);
-    replayRevealed = Array(7).fill(null).map(() => Array(7).fill(''));
-    replayWrongPos = Array(7).fill('');
-    replayColumnReds = Array(7).fill('');
-    replayGuesses = [];
-    replayStep = 0;
-    replayPlaying = false;
-    replaySpeed = 1;
+    resetReplayBoardState();
+    replayDiff = null;
 
     document.getElementById('past7-grid').classList.add('hidden');
     document.getElementById('past7-replay').classList.remove('hidden');
@@ -1608,9 +1606,8 @@ function openReplay(dayIdx) {
 }
 
 function backToPast7Grid() {
-    stopReplayTimer();
-    replayPlaying = false;
     currentReplayDayIdx = -1;
+    replayDiff = null;
     document.getElementById('past7-replay').classList.add('hidden');
     document.getElementById('past7-grid').classList.remove('hidden');
 }
@@ -1620,6 +1617,9 @@ function renderReplayBoard() {
     if (!board) return;
     board.innerHTML = '';
     board.dataset.wordLen = '7';
+
+    const diff = replayDiff;
+    const guessChars = diff ? diff.guessWord.split('') : null;
 
     for (let i = 0; i < 7; i++) {
         const row = document.createElement('div');
@@ -1632,8 +1632,19 @@ function renderReplayBoard() {
             if (replayRevealed[i][j]) {
                 box.textContent = replayRevealed[i][j];
                 box.classList.add('correct');
+                // Highlight greens produced by the currently-viewed guess
+                if (diff && diff.newGreens.has(`${i},${j}`)) {
+                    box.classList.add('diff-new');
+                }
             } else {
                 isCompleted = false;
+                // Show the current guess's letters as faded "ghosts" in blank cells
+                // of unfinished rows so the viewer can see *which* letters of the
+                // guess would have appeared at each column.
+                if (guessChars && guessChars[j]) {
+                    box.textContent = guessChars[j];
+                    box.classList.add('replay-ghost');
+                }
             }
             row.appendChild(box);
         }
@@ -1652,7 +1663,10 @@ function renderReplayBoard() {
 
         const feedback = document.createElement('div');
         feedback.className = 'wrong-position-feedback';
-        feedback.innerHTML = replayWrongPos[i].split('').map(c => `<span>${c}</span>`).join('');
+        feedback.innerHTML = replayWrongPos[i].split('').map(c => {
+            const isNew = diff && diff.newYellows.has(`${i},${c}`);
+            return `<span class="${isNew ? 'diff-new' : ''}">${c}</span>`;
+        }).join('');
         row.appendChild(feedback);
 
         board.appendChild(row);
@@ -1667,7 +1681,10 @@ function renderReplayBoard() {
     for (let j = 0; j < 7; j++) {
         const cf = document.createElement('div');
         cf.className = 'col-feedback';
-        cf.innerHTML = replayColumnReds[j].split('').map(c => `<span>${c}</span>`).join('');
+        cf.innerHTML = replayColumnReds[j].split('').map(c => {
+            const isNew = diff && diff.newReds.has(`${j},${c}`);
+            return `<span class="${isNew ? 'diff-new' : ''}">${c}</span>`;
+        }).join('');
         colFeedback.appendChild(cf);
     }
     colRow.appendChild(colFeedback);
@@ -1710,18 +1727,76 @@ function resetReplayBoardState() {
     replayStep = 0;
 }
 
-/** Rebuild the board as it was after applying the first `step` guesses (0 = empty). */
-function jumpReplayTo(step) {
-    if (replayPlaying) {
-        replayPlaying = false;
-        stopReplayTimer();
+/**
+ * Snapshot the portion of replay state that can change when a guess is applied.
+ * Used to compute the diff for the most-recently-played step so we can highlight
+ * which greens/yellows/reds were produced by *that* guess.
+ */
+function snapshotReplayState() {
+    return {
+        revealed: replayRevealed.map(row => row.slice()),
+        wrongPos: [...replayWrongPos],
+        columnReds: [...replayColumnReds],
+    };
+}
+
+function computeReplayDiff(before, after, guessWord) {
+    const newGreens = new Set();
+    const newYellows = new Set();
+    const newReds = new Set();
+
+    for (let r = 0; r < 7; r++) {
+        for (let c = 0; c < 7; c++) {
+            if (!before.revealed[r][c] && after.revealed[r][c]) {
+                newGreens.add(`${r},${c}`);
+            }
+        }
     }
+    for (let r = 0; r < 7; r++) {
+        const prev = new Set(before.wrongPos[r].split(''));
+        for (const ch of after.wrongPos[r]) {
+            if (!prev.has(ch)) newYellows.add(`${r},${ch}`);
+        }
+    }
+    for (let c = 0; c < 7; c++) {
+        const prev = new Set(before.columnReds[c].split(''));
+        for (const ch of after.columnReds[c]) {
+            if (!prev.has(ch)) newReds.add(`${c},${ch}`);
+        }
+    }
+    return { newGreens, newYellows, newReds, guessWord };
+}
+
+/**
+ * Rebuild the board as it was after applying the first `step` guesses (0 = empty).
+ * Also computes `replayDiff` — the cells/letters produced by the last applied guess
+ * (step `target`) so that `renderReplayBoard` can highlight exactly what changed.
+ */
+function jumpReplayTo(step) {
     const target = Math.max(0, Math.min(step, replayLog.length));
     resetReplayBoardState();
-    for (let i = 0; i < target; i++) {
+
+    // Apply steps 1..target-1 without diff capture
+    for (let i = 0; i < target - 1; i++) {
         const g = replayLog[i];
         if (g && g.word) applyReplayGuess(g.word);
     }
+
+    // Apply the final step with a before/after snapshot to capture the diff
+    if (target > 0) {
+        const before = snapshotReplayState();
+        const g = replayLog[target - 1];
+        if (g && g.word) {
+            applyReplayGuess(g.word);
+            const after = snapshotReplayState();
+            replayDiff = computeReplayDiff(before, after, g.word);
+        } else {
+            replayDiff = null;
+        }
+    } else {
+        replayDiff = null;
+    }
+
     replayStep = target;
     renderReplayBoard();
     renderReplayLog();
@@ -1809,91 +1884,13 @@ function applyReplayGuess(guess) {
     }
 }
 
-function stopReplayTimer() {
-    if (replayTimeoutId !== null) {
-        clearTimeout(replayTimeoutId);
-        replayTimeoutId = null;
-    }
-}
-
-function stepReplay() {
-    if (replayStep >= replayLog.length) return false;
-    const g = replayLog[replayStep];
-    if (g && g.word) applyReplayGuess(g.word);
-    replayStep++;
-    renderReplayBoard();
-    renderReplayLog();
-    return replayStep < replayLog.length;
-}
-
-function scheduleNextReplay() {
-    stopReplayTimer();
-    if (!replayPlaying) return;
-    if (replayStep >= replayLog.length) {
-        replayPlaying = false;
-        updateReplayControls();
-        return;
-    }
-    const current = replayLog[replayStep];
-    const prevT = replayStep > 0 ? (replayLog[replayStep - 1].t || 0) : 0;
-    const delta = Math.max(0, (current.t || 0) - prevT);
-    // Clamp so the replay stays watchable even if guesses were minutes apart
-    const ms = Math.min(4000, Math.max(350, delta * 1000)) / replaySpeed;
-    replayTimeoutId = setTimeout(() => {
-        if (!replayPlaying) return;
-        stepReplay();
-        scheduleNextReplay();
-    }, ms);
-}
-
-function playReplay() {
-    if (replayStep >= replayLog.length) {
-        resetReplayBoardState();
-        renderReplayBoard();
-        renderReplayLog();
-    }
-    replayPlaying = true;
-    updateReplayControls();
-    scheduleNextReplay();
-}
-
-function pauseReplay() {
-    replayPlaying = false;
-    stopReplayTimer();
-    updateReplayControls();
-}
-
-function toggleReplayPlayPause() {
-    if (replayPlaying) pauseReplay();
-    else playReplay();
-}
-
-function cycleReplaySpeed() {
-    const speeds = [1, 2, 4];
-    const idx = speeds.indexOf(replaySpeed);
-    replaySpeed = speeds[(idx + 1) % speeds.length];
-    updateReplayControls();
-    if (replayPlaying) scheduleNextReplay();
-}
-
 function updateReplayControls() {
-    const playBtn = document.getElementById('past7-replay-play');
-    if (playBtn) {
-        if (replayStep >= replayLog.length && !replayPlaying) {
-            playBtn.textContent = '↻ Replay';
-        } else {
-            playBtn.textContent = replayPlaying ? '⏸ Pause' : '▶ Play';
-        }
-    }
-    const speedBtn = document.getElementById('past7-replay-speed');
-    if (speedBtn) {
-        speedBtn.textContent = `Speed: ${replaySpeed}×`;
-        speedBtn.dataset.speed = String(replaySpeed);
-    }
     const prevBtn = document.getElementById('past7-replay-prev');
     if (prevBtn) prevBtn.disabled = replayStep <= 0;
     const nextBtn = document.getElementById('past7-replay-next');
     if (nextBtn) nextBtn.disabled = replayStep >= replayLog.length;
+    const counter = document.getElementById('past7-replay-step');
+    if (counter) counter.textContent = `${replayStep} / ${replayLog.length}`;
 }
 
 // --- Startup ---
