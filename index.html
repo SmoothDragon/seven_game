@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Seven 7s</title>
     <!-- Bump ?v= on every release to cache-bust GitHub Pages. Keep all asset versions in sync. -->
-    <link rel="stylesheet" href="style.css?v=5">
+    <link rel="stylesheet" href="style.css?v=6">
 </head>
 
 <body>
@@ -125,13 +125,16 @@
                     <button id="past7-back-btn" class="past7-back-btn">← Back to Past 7</button>
                     <div id="past7-replay-header"></div>
                     <div class="past7-replay-body">
-                        <div id="past7-replay-board"></div>
-                        <div id="past7-replay-controls">
-                            <button id="past7-replay-prev" class="past7-replay-btn" aria-label="Previous guess" title="Previous guess">◀</button>
-                            <span id="past7-replay-step" class="past7-replay-step" aria-live="polite">0 / 0</span>
-                            <button id="past7-replay-next" class="past7-replay-btn" aria-label="Next guess" title="Next guess">▶</button>
+                        <div class="past7-replay-stage">
+                            <div id="past7-replay-controls">
+                                <button id="past7-replay-prev" class="past7-replay-btn" aria-label="Previous guess" title="Previous guess (↑)">▲</button>
+                                <span id="past7-replay-step" class="past7-replay-step" aria-live="polite">0 / 0</span>
+                                <button id="past7-replay-next" class="past7-replay-btn" aria-label="Next guess" title="Next guess (↓)">▼</button>
+                            </div>
+                            <div id="past7-replay-board"></div>
+                            <div id="past7-replay-colfeedback"></div>
                         </div>
-                        <p class="past7-replay-hint">Step through guesses with the arrows, or click any guess below to jump to it.</p>
+                        <p class="past7-replay-hint">Step through guesses with the ↑ / ↓ arrows, or click any guess below to jump to it.</p>
                         <ul id="past7-replay-log" class="past7-replay-log"></ul>
                     </div>
                 </div>
@@ -196,10 +199,10 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="words.js?v=5"></script>
-    <script src="scrabble_ranks.js?v=5"></script>
-    <script src="firebase-config.js?v=5"></script>
-    <script src="script.js?v=5"></script>
+    <script src="words.js?v=6"></script>
+    <script src="scrabble_ranks.js?v=6"></script>
+    <script src="firebase-config.js?v=6"></script>
+    <script src="script.js?v=6"></script>
 </body>
 
 </html>

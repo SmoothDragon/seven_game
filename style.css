@@ -1107,11 +1107,12 @@ button.hint-btn:disabled {
 }
 
 #past7-replay-board {
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
-    width: 100%;
 }
 
 #past7-replay-board .word-row {
@@ -1127,12 +1128,39 @@ button.hint-btn:disabled {
     gap: 5px;
 }
 
-#past7-replay-controls {
-    display: flex;
+/* The "stage" is a 2-column / 2-row CSS grid:
+ *   col 1 = vertical stepper (spans row 1 only)
+ *   col 2 row 1 = the 7×7 board
+ *   col 2 row 2 = the column-feedback strip (aligned under the grid columns)
+ * Putting the stepper in row 1 only means `align-self: center` centers it against
+ * the 7 word rows alone — not the full height that would include the column
+ * feedback below — so the stepper sits a touch higher and reads as "attached to
+ * the grid". Tight column-gap keeps the arrows snug against the left edge of the
+ * grid with just enough breathing room not to collide with the letter boxes.
+ */
+.past7-replay-stage {
+    display: grid;
+    grid-template-columns: auto auto;
+    grid-template-rows: auto auto;
+    column-gap: 6px;
+    row-gap: 10px;
     justify-content: center;
+}
+
+#past7-replay-controls {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 8px;
+    align-self: center;
+}
+
+#past7-replay-colfeedback {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: center;
 }
 
 .past7-replay-btn {

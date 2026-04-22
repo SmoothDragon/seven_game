@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '5';
+const ASSET_VERSION = '6';
 
 // Global state
 let secretWords = [];
@@ -530,13 +530,15 @@ function setupEventListeners() {
     on('past7-replay-prev', 'click', replayStepBackward);
     on('past7-replay-next', 'click', replayStepForward);
 
-    // Keyboard shortcuts: ← / → step through the replay when it's visible
+    // Keyboard shortcuts: ↑ / ↓ step through the replay when it's visible. Up goes to
+    // the previous guess (earlier in the log), Down to the next (later) — matching the
+    // top-to-bottom reading order of the guess list.
     document.addEventListener('keydown', (e) => {
         const replayVisible = gameMode === 'past7'
             && !document.getElementById('past7-replay')?.classList.contains('hidden');
         if (!replayVisible) return;
-        if (e.key === 'ArrowLeft') { e.preventDefault(); replayStepBackward(); }
-        else if (e.key === 'ArrowRight') { e.preventDefault(); replayStepForward(); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); replayStepBackward(); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); replayStepForward(); }
     });
 
     // Splash / Rules
@@ -1676,6 +1678,13 @@ function renderReplayBoard() {
         board.appendChild(row);
     }
 
+    // Column feedback renders into its own sibling container so the stepper on the
+    // left can be vertically centered against the 7×7 grid only, not against the
+    // grid + column-feedback strip below. Falls back to appending into the board
+    // if the sibling is missing (e.g. stale cached HTML).
+    const colHost = document.getElementById('past7-replay-colfeedback') || board;
+    if (colHost !== board) colHost.innerHTML = '';
+
     const colRow = document.createElement('div');
     colRow.className = 'column-feedback-row';
     colRow.dataset.wordLen = '7';
@@ -1698,7 +1707,7 @@ function renderReplayBoard() {
     spacer.setAttribute('aria-hidden', 'true');
     colRow.appendChild(spacer);
 
-    board.appendChild(colRow);
+    colHost.appendChild(colRow);
 }
 
 function renderReplayLog() {

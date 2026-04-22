@@ -87,7 +87,7 @@ One page, one `<body>`. Major elements, in order:
        - `<h2 class="past7-title">Past 7 Days</h2>` and `.past7-subtitle` paragraph.
        - `.past7-variant-toggle` — a two-button sub-toggle (`#past7-variant-common` labelled "Daily", `#past7-variant-wgpo` labelled "Daily Hard") that flips the grid between the classic Daily history and the Daily Hard history. The active button has `.active`.
        - `#past7-grid.past7-grid` — a CSS-grid of `.past7-card` tiles, one per past day.
-       - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with `#past7-replay-board`, `#past7-replay-controls` (just `#past7-replay-prev` (`◀`) + `#past7-replay-step` (counter) + `#past7-replay-next` (`▶`) — circular buttons, no autoplay / speed controls), a hint paragraph, and `ul#past7-replay-log.past7-replay-log`.
+       - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with a horizontal `.past7-replay-stage` row — inside that, the vertical stepper `#past7-replay-controls` (stacked top-to-bottom: `#past7-replay-prev` (`▲`) · `#past7-replay-step` counter · `#past7-replay-next` (`▼`)) sits to the **left** of `#past7-replay-board`. Below the stage sit the hint paragraph and `ul#past7-replay-log.past7-replay-log`.
    - **Sidebars** (outside `.container` but inside `.main-wrapper`):
      - `#sidebar-history` (`.sidebar.history`, only visible in practice mode, `display:none` by default) containing `<h3>Guess History</h3>` and `<ul id="guess-history">`.
      - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) with `<h3>Today's Top Ten</h3>` (rewritten to `"Today's Tough Top Ten"` when viewing the Daily Hard variant), `#scoreboard-list`, and a `.daily-history-section` with `<h4>Your Guesses</h4>` + `<ul id="daily-guess-history">`.
@@ -342,7 +342,7 @@ Only `.has-replay` cards are wired to `openReplay(idx)`.
 - `jumpReplayTo(step)` — the scrubber primitive. Clamps `step` into `[0, replayLog.length]`, calls `resetReplayBoardState()`, replays guesses `0..step-2` in order by calling `applyReplayGuess` on each (rather than trying to "un-apply" — the column-red / yellow-prune logic depends on the full history). For the final step it takes a `before` snapshot, applies the guess, takes an `after` snapshot, and stores `replayDiff = computeReplayDiff(before, after, word)`. When `step === 0`, `replayDiff` is cleared. Finally sets `replayStep = target` and re-renders.
 - `replayStepForward()` / `replayStepBackward()` — thin wrappers that call `jumpReplayTo(replayStep ± 1)`.
 - Clicking any `.replay-log-entry` calls `jumpReplayTo(i + 1)` so the clicked guess becomes the `.current` entry (highlighted blue, with a 3px left bar) and the board reflects the state immediately after that guess — **including** the diff highlight.
-- Keyboard: while the replay panel is visible (`gameMode === 'past7'` and `#past7-replay` is not `.hidden`), `ArrowLeft` and `ArrowRight` step the viewer backward/forward.
+- Keyboard: while the replay panel is visible (`gameMode === 'past7'` and `#past7-replay` is not `.hidden`), `ArrowUp` steps backward (earlier guess) and `ArrowDown` steps forward (later guess). The direction matches the top-to-bottom reading order of the guess list and the `▲` / `▼` on-screen buttons.
 - `updateReplayControls()` — toggles `disabled` on `#past7-replay-prev` / `#past7-replay-next` at the endpoints and writes the `#past7-replay-step` counter as `"${replayStep} / ${replayLog.length}"`.
 
 **Diff highlighting in `renderReplayBoard`**. When `replayDiff` is non-null:
@@ -352,7 +352,7 @@ Only `.has-replay` cards are wired to `openReplay(idx)`.
 - Additionally, for rows that are **not** yet fully revealed, blank cells render the current guess's letter at that column as a faded-grey `.replay-ghost` — so the viewer can see exactly which letter of the guess landed in each position, even if that column was pruned to nothing.
 - When the viewer is at step 0 (`replayDiff === null`), none of the highlighting or ghost letters appear — the board is an empty 7×7 grid, matching the pre-game state.
 
-**Controls layout** (`#past7-replay-controls` row, centered): `◀` · `N / M` counter · `▶`. The arrow buttons are 40px circular blue buttons; the counter is a bold tabular-nums span. Below sits a muted hint line ("Step through guesses with the arrows, or click any guess below to jump to it.") and then the guess log.
+**Controls layout** (`#past7-replay-controls`, vertical, sitting to the left of the 7×7 board inside `.past7-replay-stage`): top-to-bottom `▲` · `N / M` counter · `▼`. The arrow buttons are 40px circular blue buttons; the counter is a bold tabular-nums span. The stage uses `flex-direction: row; align-items: center` so the stepper is vertically centered against the board. Below the stage sits a muted hint line ("Step through guesses with the ↑ / ↓ arrows, or click any guess below to jump to it.") and then the guess log.
 
 **Back button** (`backToPast7Grid`): clears `currentReplayDayIdx` and `replayDiff`, hides the replay panel and re-shows the grid. No timers to stop; no playback state to tear down.
 
