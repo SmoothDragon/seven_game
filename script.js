@@ -1558,7 +1558,7 @@ function renderPast7Grid() {
                 `<div class="past7-card-best"><strong>${escapeHtml(best.nickname)}</strong></div>` +
                 `<div class="past7-card-stats muted">No replay data</div>`;
         } else {
-            statusHtml = '<div class="past7-card-best muted">No hint-free solves</div>';
+            statusHtml = '<div class="past7-card-best muted">No replay data</div>';
         }
 
         card.innerHTML = `

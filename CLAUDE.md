@@ -321,9 +321,9 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 **Grid rendering** (`renderPast7Grid`). Each `.past7-card` shows the formatted short date, the common letter in large type, and either:
 - "Loading…" (muted) while `!day.loaded`;
-- the best player's nickname + `N guesses · mm:ss · K hint(s)` + the `.has-replay` class making the card clickable, if a replayable solve exists;
-- the best player's nickname + "No replay data" (muted) if there's a score but no `guess_log` (older data);
-- "No solves" (muted) if no one played that day.
+- the best player's nickname + `N guesses · mm:ss` + the `.has-replay` class making the card clickable, if a replayable zero-hint solve exists;
+- the best player's nickname + "No replay data" (muted) if there's a zero-hint score but no `guess_log` (older data);
+- a single muted "No replay data" line if no zero-hint solve exists at all for that day — same copy as the previous case so the grid reads uniformly.
 
 Only `.has-replay` cards are wired to `openReplay(idx)`.
 
@@ -437,7 +437,7 @@ Renders a `<table class="scoreboard-table">` with columns `# | Name | Guesses | 
 
 **Past 7** reads from the collection that matches the currently selected `past7Variant` (`daily_scores` for Common, `daily_scores_wgpo` for Daily Hard). Each `day` built by `initPast7` is tagged with `day.variant` at construction time, and `fetchBestScoreForDay(day)` issues `db.collection(dailyScoresCollection(day.variant)).where('date','==',day.date).get()` — tagging per-day keeps late-arriving results from a prior variant harmless: if the user flips the toggle while fetches are in flight, `past7Days` is rebuilt and the orphaned `day` objects are no longer in the array, so their `day.loaded = true` update silently no-ops against the new grid.
 
-**Best-score selection** for a Past 7 card is deliberately stricter than the live daily scoreboard's sort. Only solves that used **zero hints** (green + yellow = 0) are eligible; they are then ranked **fewest guesses → fastest time**. The displayed best is the **best-ranked zero-hint solve that has a non-empty `guess_log`** — the Past 7 card is primarily a replay surface, so non-replayable entries are skipped so the card always opens something watchable. If every zero-hint solve for that day lacks a guess log, we fall back to the top-ranked zero-hint solve and the card renders "No replay data" (non-clickable). If no zero-hint solve exists at all, `day.bestScore` stays `null` and the card renders "No hint-free solves". Queries are independent — one failure doesn't block the others; each `fetch` updates only its own card.
+**Best-score selection** for a Past 7 card is deliberately stricter than the live daily scoreboard's sort. Only solves that used **zero hints** (green + yellow = 0) are eligible; they are then ranked **fewest guesses → fastest time**. The displayed best is the **best-ranked zero-hint solve that has a non-empty `guess_log`** — the Past 7 card is primarily a replay surface, so non-replayable entries are skipped so the card always opens something watchable. If every zero-hint solve for that day lacks a guess log, we fall back to the top-ranked zero-hint solve and the card renders "No replay data" (non-clickable). If no zero-hint solve exists at all, `day.bestScore` stays `null` and the card also renders "No replay data" — both no-replay states use the same copy to keep the grid visually uniform. Queries are independent — one failure doesn't block the others; each `fetch` updates only its own card.
 
 Flipping the sub-toggle inside `#past7-section` is handled by `switchPast7Variant(variant)`, which stops any running replay, updates the two buttons' `.active` classes via `updatePast7VariantButtons()`, and calls `initPast7()` again to rebuild the grid for the new variant.
 
