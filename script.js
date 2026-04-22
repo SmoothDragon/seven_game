@@ -113,7 +113,7 @@ function updateCategoryOptionLabels() {
     const n = wordLen;
     sel.options[0].textContent = `Common (5k most common ${n}-letter)`;
     sel.options[1].textContent = `Probable (5k most probable ${n}-letter)`;
-    sel.options[2].textContent = `All valid WGPO ${n}-letter`;
+    sel.options[2].textContent = `All valid WOW24 ${n}-letter`;
 }
 
 function syncGuessInputForWordLen() {

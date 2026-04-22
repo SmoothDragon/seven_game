@@ -449,7 +449,7 @@ Flipping the sub-toggle inside `#past7-section` is handled by `switchPast7Varian
 
 These are user-facing; reuse the wording verbatim for consistency:
 
-1. All guesses must include the common letter and be a valid WGPO word. The daily puzzle is always seven 7-letter words; in Practice you can play seven 7-letter or eight 8-letter words per game.
+1. All guesses must include the common letter and be a valid WOW24 word (linked in-rule to `https://wordgameplayers.org/wgpo-official-words/`). The daily puzzle is always seven 7-letter words; in Practice you can play seven 7-letter or eight 8-letter words per game.
 2. Guessed letters in the correct position will turn **green**.
 3. Guessed letters in incorrect positions will show in **yellow** to the right of the word.
 4. **Red** letters below a column indicate that letter is not present in that column.
