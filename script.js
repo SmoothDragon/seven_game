@@ -376,7 +376,7 @@ function dailyScoresCollection(variant) {
 
 function updateScoreboardHeading(variant) {
     const h = document.querySelector('#sidebar-scoreboard h3');
-    if (h) h.textContent = variant === 'wgpo' ? "Today's Hard Scoreboard" : "Today's Scoreboard";
+    if (h) h.textContent = variant === 'wgpo' ? "Today's Tough Top Ten" : "Today's Top Ten";
 }
 
 function initDailyGame() {

@@ -90,7 +90,7 @@ One page, one `<body>`. Major elements, in order:
        - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with `#past7-replay-board`, `#past7-replay-controls` (just `#past7-replay-prev` (`◀`) + `#past7-replay-step` (counter) + `#past7-replay-next` (`▶`) — circular buttons, no autoplay / speed controls), a hint paragraph, and `ul#past7-replay-log.past7-replay-log`.
    - **Sidebars** (outside `.container` but inside `.main-wrapper`):
      - `#sidebar-history` (`.sidebar.history`, only visible in practice mode, `display:none` by default) containing `<h3>Guess History</h3>` and `<ul id="guess-history">`.
-     - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) with `<h3>Today's Scoreboard</h3>`, `#scoreboard-list`, and a `.daily-history-section` with `<h4>Your Guesses</h4>` + `<ul id="daily-guess-history">`.
+     - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) with `<h3>Today's Top Ten</h3>` (rewritten to `"Today's Tough Top Ten"` when viewing the Daily Hard variant), `#scoreboard-list`, and a `.daily-history-section` with `<h4>Your Guesses</h4>` + `<ul id="daily-guess-history">`.
 3. **Nickname Modal** `#nickname-modal` (`.modal-overlay.hidden` by default): `.modal-content` containing `<h2>Puzzle Complete!</h2>`, a prompt, `#nickname-input` (maxlength 20), and `#nickname-save-btn`.
 4. **Splash/Rules Overlay** `#splash-overlay` (visible initially; click-anywhere dismisses) containing an `#splash-content` block with the rules (see section 7) and a link to the WGPO official word list.
 5. **Script tags**, in this order:
@@ -208,7 +208,7 @@ The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {
 2. `resetGameState()` (clears arrays, timer, history, keyboard).
 3. Reads `localStorage.getItem(dailySubmittedKey(variant, todayStr))` into `dailySubmitted` — that key is `"daily_submitted_"+YYYY-MM-DD` for classic and `"daily_submitted_wgpo_"+YYYY-MM-DD` for Daily Hard, so submissions for the two variants are tracked independently.
 4. Calls `puzzleForDateVariant(todayStr, variant)`, copies the result into `commonLetter` + `secretWords`.
-5. Calls `updateScoreboardHeading(variant)` which rewrites the sidebar title between `"Today's Scoreboard"` and `"Today's Hard Scoreboard"`.
+5. Calls `updateScoreboardHeading(variant)` which rewrites the sidebar title between `"Today's Top Ten"` and `"Today's Tough Top Ten"`.
 6. Renders the board, calls `fetchLeaderboard()` (which picks the right collection via `currentDailyVariant`), and focuses the input.
 
 `initGame()` (practice) is async. It reads `#practice-word-length` and, if 8, awaits `ensureWords8LexiconLoaded()` while showing a loading message. Then it picks the active word list based on `#difficulty` (common = first 5k, probable = 5k lowest Scrabble rank, all = full list), and picks the common letter + secrets the same way but with `Math.random()` (not seeded). If no letter has ≥50 candidates it falls back to `e`.
