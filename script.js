@@ -95,7 +95,11 @@ function updateGameTaglineText() {
     if (gameMode === 'daily') {
         s.textContent = 'Guess 7-letter words containing the common letter. Find all 7 secret words!';
     } else if (gameMode === 'daily_wgpo') {
-        s.textContent = 'Daily Hard — harder daily puzzle drawn from the full 7-letter word list. Find all 7 secret words!';
+        // Uses innerHTML so we can embed the WOW24 hyperlink. All content is static / author-controlled.
+        s.innerHTML =
+            'Daily Hard — harder puzzle drawn from all ' +
+            '<a href="https://wordgameplayers.org/wgpo-official-words/" target="_blank" rel="noopener">WOW24</a>' +
+            ' 7-letter words. Find all 7 secret words!';
     } else if (gameMode === 'past7') {
         s.textContent = 'Relive the best solves from the past seven daily puzzles.';
     } else {

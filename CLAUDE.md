@@ -309,6 +309,8 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 `switchMode(mode)` toggles the `.active` class on all four mode buttons, shows `#controls` only in practice, shows `#sidebar-history` only in practice, shows `#sidebar-scoreboard` for both daily variants, and swaps `#game-play-area` with `#past7-section` via `style.display` for Past 7 vs. the other modes. Finally it calls `initPast7()`, `initDailyGame()`, `initDailyWgpoGame()`, or `initGame()` as appropriate, then `updateGameTaglineText()`. No playback-timer bookkeeping is needed — the Past 7 viewer is purely step-driven.
 
+`updateGameTaglineText()` writes the per-mode tagline into `#game-tagline-text`. It uses `textContent` for all branches **except** `daily_wgpo`, which uses `innerHTML` so the string can embed a static hyperlink: `Daily Hard — harder puzzle drawn from all <a href="https://wordgameplayers.org/wgpo-official-words/" target="_blank" rel="noopener">WOW24</a> 7-letter words. Find all 7 secret words!` The content is entirely author-controlled (no user input interpolated), so the `innerHTML` usage is safe.
+
 `resetGameState()` clears all state arrays including `guessLog` (sized by current `wordLen`), rebuilds column feedback DOM, clears input/history/board/keyboard classes, resets hint counts, stops timer, shows board, re-syncs `#guess-input.maxLength` and placeholder, and clears the fireworks overlay.
 
 ### 5.14 Past 7 mode & replay
