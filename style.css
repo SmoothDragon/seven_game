@@ -647,6 +647,10 @@ button.hint-btn:disabled {
 #splash-content .green-text { color: #6aaa64; font-weight: bold; }
 #splash-content .yellow-text { color: #c9b458; font-weight: bold; }
 #splash-content .red-text { color: #d9534f; font-weight: bold; }
+#splash-content .blue-text { color: #06b6d4; font-weight: bold; }
+#splash-content .black-text { color: #3a3a3c; font-weight: bold; }
+#splash-content .green-hint-text { color: #6aaa64; font-weight: bold; }
+#splash-content .yellow-hint-text { color: #c9b458; font-weight: bold; }
 
 .splash-dismiss {
     text-align: center;
