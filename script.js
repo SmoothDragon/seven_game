@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '6';
+const ASSET_VERSION = '8';
 
 // Global state
 let secretWords = [];

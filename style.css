@@ -945,6 +945,56 @@ button.hint-btn:disabled {
     }
 }
 
+/* Wide-screen layout: place the on-screen keyboard alongside the board instead
+ * of below it, so the whole game (board + keyboard) fits without vertical
+ * scrolling on laptop-sized displays (e.g. 13" MacBooks at 1440×900).
+ *
+ * Below this breakpoint, everything stays exactly stacked as before — the
+ * narrow / mobile layout is untouched. We use a 6-row CSS grid where the
+ * keyboard cell spans every left-column row, so `align-self: center` on the
+ * keyboard vertically centers it against the entire left stack (board + input
+ * + hint area). The breakpoint is chosen so a typical layout of [game pane +
+ * scoreboard sidebar + side-by-side keyboard] still has breathing room on a
+ * 1440px-wide MacBook display while keeping the iPad-portrait stacked layout
+ * unchanged. */
+@media (min-width: 1100px) {
+    .main-wrapper {
+        max-width: 1200px;
+    }
+
+    .container {
+        max-width: 940px;
+    }
+
+    #game-play-area {
+        display: grid;
+        grid-template-columns: minmax(360px, 1fr) auto;
+        grid-template-areas:
+            "header   keyboard"
+            "board    keyboard"
+            "colfeed  keyboard"
+            "input    keyboard"
+            "hint     keyboard"
+            "msg      keyboard";
+        column-gap: 28px;
+        align-items: start;
+    }
+
+    .game-header { grid-area: header; }
+    .board-wrap { grid-area: board; }
+    .column-feedback-row { grid-area: colfeed; }
+    .input-area { grid-area: input; }
+    .hint-area { grid-area: hint; }
+    #message { grid-area: msg; }
+
+    #keyboard {
+        grid-area: keyboard;
+        width: 460px;
+        margin: 0;
+        align-self: center;
+    }
+}
+
 /* --- Past 7 mode --- */
 .past7-title {
     text-align: center;
