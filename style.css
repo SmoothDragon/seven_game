@@ -1346,3 +1346,411 @@ button.hint-btn:disabled {
     letter-spacing: 2px;
     text-transform: uppercase;
 }
+
+/* =====================================================================
+   Admin page (admin.html)
+   The admin page reuses the .word-row / .letter-box / .col-feedback /
+   .past7-replay-* selectors above for the replay board, so most of the
+   board styling is already covered. This section adds the admin chrome:
+   sign-in gate, sessions list, controls, and invalid-guess decorations.
+   ===================================================================== */
+
+body.admin-body {
+    align-items: stretch;
+}
+
+.admin-page {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: white;
+    padding: 14px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 16px;
+}
+
+.admin-header h1 {
+    margin: 0;
+    font-size: 1.4em;
+}
+
+.admin-auth-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.admin-signout-btn {
+    padding: 6px 12px;
+    font-size: 0.85em;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.admin-signout-btn:hover {
+    background: #5a6268;
+}
+
+.admin-gate {
+    background: white;
+    padding: 30px 40px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-width: 560px;
+    margin: 40px auto;
+}
+
+.admin-gate h2 {
+    margin-top: 0;
+}
+
+.admin-gate code {
+    background: #f0f2f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.admin-gate.hidden { display: none; }
+
+.admin-primary-btn {
+    padding: 10px 24px;
+    font-size: 1em;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.admin-primary-btn:hover { background: #0056b3; }
+
+.admin-secondary-btn {
+    padding: 8px 14px;
+    font-size: 0.9em;
+    background: white;
+    color: #007bff;
+    border: 2px solid #007bff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.admin-secondary-btn:hover:not(:disabled) {
+    background: #e8f0fe;
+}
+
+.admin-secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.admin-error { color: #d9534f; font-size: 0.9em; }
+.admin-muted { color: #888; font-size: 0.9em; }
+
+#admin-dashboard.hidden { display: none; }
+
+.admin-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    background: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    margin-bottom: 12px;
+}
+
+.admin-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.95em;
+    color: #333;
+}
+
+.admin-control input[type="date"] {
+    width: auto;
+    min-height: 36px;
+    padding: 4px 8px;
+    font-size: 0.95em;
+}
+
+.admin-variant-toggle {
+    display: inline-flex;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.admin-variant-btn {
+    padding: 6px 14px;
+    font-size: 0.9em;
+    font-weight: bold;
+    border: 2px solid #007bff;
+    cursor: pointer;
+    background: white;
+    color: #007bff;
+}
+
+.admin-variant-btn:first-child { border-radius: 6px 0 0 6px; }
+.admin-variant-btn:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+
+.admin-variant-btn.active {
+    background: #007bff;
+    color: white;
+}
+
+.admin-variant-btn:hover:not(.active) {
+    background: #e8f0fe;
+}
+
+.admin-puzzle-info {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 0.9em;
+    color: #444;
+}
+
+.admin-puzzle-info code {
+    background: white;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.95em;
+    color: #333;
+}
+
+.admin-variant-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: #e8f0fe;
+    color: #0056b3;
+}
+
+.admin-variant-badge.wgpo {
+    background: #fff3cd;
+    color: #856404;
+}
+
+/* Two-column layout: sessions list (left) + replay viewer (right). On narrow
+ * viewports it stacks. */
+.admin-body-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) 1fr;
+    gap: 16px;
+    align-items: start;
+}
+
+@media (max-width: 800px) {
+    .admin-body-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.admin-sessions {
+    background: white;
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.admin-sessions h3 {
+    margin: 0 0 10px;
+    font-size: 1em;
+    text-align: center;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.admin-session-card {
+    padding: 8px 10px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, background-color 0.15s;
+    background: #fafbfc;
+}
+
+.admin-session-card:hover {
+    border-color: #007bff;
+    background: #f0f7ff;
+}
+
+.admin-session-card.active {
+    border-color: #007bff;
+    background: #cfe2ff;
+}
+
+.admin-session-name {
+    font-weight: bold;
+    font-size: 0.95em;
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.admin-session-stats {
+    font-size: 0.8em;
+    color: #555;
+    margin-bottom: 4px;
+}
+
+.admin-session-sid {
+    font-size: 0.7em;
+    color: #999;
+}
+
+.admin-session-sid code {
+    background: transparent;
+    padding: 0;
+}
+
+.admin-badge {
+    font-size: 0.7em;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.admin-badge-finished {
+    background: #d4edda;
+    color: #155724;
+}
+
+.admin-badge-unfinished {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.admin-mini {
+    color: #d9534f;
+    font-weight: bold;
+}
+
+.admin-replay {
+    background: white;
+    padding: 16px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    min-height: 400px;
+}
+
+.admin-replay-empty {
+    color: #888;
+    text-align: center;
+    padding: 80px 20px;
+    font-style: italic;
+}
+
+#admin-replay-content.hidden { display: none; }
+
+#admin-replay-header {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+#admin-replay-header h3 { margin: 4px 0; }
+#admin-replay-header p { margin: 4px 0; color: #555; font-size: 0.9em; }
+
+/* Reuse #past7-replay-* layout: vertical stepper to the left of the board.
+ * The admin replay grid uses the SAME .past7-replay-stage class so the layout
+ * stays in sync. We just need to wire #admin-replay-controls into the grid. */
+#admin-replay-controls {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    align-self: center;
+}
+
+#admin-replay-board {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+#admin-replay-colfeedback {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: center;
+}
+
+.admin-replay-log {
+    margin: 12px auto 0;
+}
+
+/* Invalid guess entries: red bar + light red wash, distinct from the played
+ * (blue) and current (deeper blue) states which still apply on top. */
+.replay-log-entry.admin-invalid {
+    background-color: #fdf2f2;
+}
+
+.replay-log-entry.admin-invalid.played {
+    background-color: #fde8e8;
+}
+
+.replay-log-entry.admin-invalid.current {
+    background-color: #f8d7da;
+    border-left-color: #d9534f;
+}
+
+.replay-log-entry.admin-invalid .replay-log-word {
+    color: #a94442;
+    text-decoration: line-through;
+}
+
+.admin-reject-reason {
+    margin-left: auto;
+    font-size: 0.75em;
+    color: #a94442;
+    background: #fde8e8;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-weight: bold;
+}
+
+/* Local .hidden rules for admin-page elements that need it.
+ * NB: a global `.hidden { display: none }` would clobber the existing
+ *     `#game-board.hidden { visibility: hidden }` used during pause in the
+ *     live game, so we keep .hidden scoped per-element. */
+.admin-signout-btn.hidden { display: none; }
+#admin-replay-content.hidden { display: none; }
+#admin-replay-empty.hidden { display: none; }
+

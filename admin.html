@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<!--
+  Seven 7s — Admin
+
+  Private dashboard for the puzzle owner. Signs in with Google via Firebase
+  Auth and only proceeds if the user's UID matches `ADMIN_UID` in admin.js.
+  Reads from the live_guesses / live_guesses_wgpo collections, which Firestore
+  rules restrict to that same UID.
+
+  This page is intentionally NOT linked from index.html. The auth check is the
+  primary gate; the unguessable URL is just a defense-in-depth pleasantry.
+
+  Bump ?v= on every release to cache-bust GitHub Pages, in lockstep with
+  index.html and the ASSET_VERSION constant in script.js / admin.js.
+-->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Seven 7s — Admin</title>
+    <link rel="stylesheet" href="style.css?v=9">
+</head>
+
+<body class="admin-body">
+    <div class="admin-page">
+        <header class="admin-header">
+            <h1>Seven 7s — Admin</h1>
+            <div class="admin-auth-bar">
+                <span id="admin-user-info"></span>
+                <button id="admin-signout-btn" class="admin-signout-btn hidden">Sign out</button>
+            </div>
+        </header>
+
+        <!-- Gate 1: not yet signed in -->
+        <section id="admin-signin-gate" class="admin-gate">
+            <h2>Sign in</h2>
+            <p>Sign in with the Google account that owns this puzzle.</p>
+            <button id="admin-signin-btn" class="admin-primary-btn">Sign in with Google</button>
+            <p id="admin-signin-msg" class="admin-error"></p>
+        </section>
+
+        <!-- Gate 2: signed in, but ADMIN_UID not yet configured in admin.js -->
+        <section id="admin-setup-gate" class="admin-gate hidden">
+            <h2>Setup needed</h2>
+            <p><code>ADMIN_UID</code> hasn't been set in <code>admin.js</code>. To finish setup:</p>
+            <ol>
+                <li>Copy your UID below.</li>
+                <li>In <code>admin.js</code>, replace
+                    <code>const ADMIN_UID = '__SET_ME__';</code> with your UID.
+                </li>
+                <li>In the Firebase console (Firestore → Rules), allow <code>read</code>
+                    on <code>live_guesses</code> and <code>live_guesses_wgpo</code> when
+                    <code>request.auth.uid == '<your-uid&gt;'</code>. See <code>firestore.rules</code>
+                    in the repo for the full ruleset.
+                </li>
+                <li>Hard-refresh this page.</li>
+            </ol>
+            <p>Your UID: <code id="admin-setup-uid"></code></p>
+        </section>
+
+        <!-- Gate 3: signed in, but UID does not match ADMIN_UID -->
+        <section id="admin-denied-gate" class="admin-gate hidden">
+            <h2>Access denied</h2>
+            <p>This Google account is not authorized.</p>
+            <p>Your UID: <code id="admin-denied-uid"></code></p>
+        </section>
+
+        <!-- Main dashboard: signed in & authorized -->
+        <section id="admin-dashboard" class="hidden">
+            <div class="admin-controls">
+                <label class="admin-control">Date:
+                    <input type="date" id="admin-date">
+                </label>
+                <div class="admin-variant-toggle" role="tablist">
+                    <button id="admin-variant-common" class="admin-variant-btn active" role="tab">Daily</button>
+                    <button id="admin-variant-wgpo" class="admin-variant-btn" role="tab">Daily Hard</button>
+                </div>
+                <button id="admin-export-lexicon" class="admin-secondary-btn"
+                    title="Download all 'not in lexicon' guesses for this date as a CSV file">
+                    Export not-in-lexicon CSV
+                </button>
+            </div>
+
+            <div id="admin-puzzle-info" class="admin-puzzle-info"></div>
+
+            <div class="admin-body-grid">
+                <aside class="admin-sessions">
+                    <h3>Sessions</h3>
+                    <div id="admin-sessions-list">
+                        <p class="admin-muted">Loading…</p>
+                    </div>
+                </aside>
+
+                <main class="admin-replay">
+                    <div id="admin-replay-empty" class="admin-replay-empty">
+                        Pick a session on the left to step through their guesses.
+                    </div>
+                    <div id="admin-replay-content" class="hidden">
+                        <div id="admin-replay-header"></div>
+                        <div class="past7-replay-stage">
+                            <div id="admin-replay-controls">
+                                <button id="admin-replay-prev" class="past7-replay-btn"
+                                    aria-label="Previous guess" title="Previous guess (↑)">▲</button>
+                                <span id="admin-replay-step" class="past7-replay-step"
+                                    aria-live="polite">0 / 0</span>
+                                <button id="admin-replay-next" class="past7-replay-btn"
+                                    aria-label="Next guess" title="Next guess (↓)">▼</button>
+                            </div>
+                            <div id="admin-replay-board"></div>
+                            <div id="admin-replay-colfeedback"></div>
+                        </div>
+                        <p class="past7-replay-hint">
+                            Step with ↑ / ↓ keys, or click a guess in the log to jump there.
+                            Invalid attempts are highlighted in red and do <em>not</em> change board state.
+                        </p>
+                        <ul id="admin-replay-log" class="past7-replay-log admin-replay-log"></ul>
+                    </div>
+                </main>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="words.js?v=9"></script>
+    <script src="firebase-config.js?v=9"></script>
+    <script src="admin.js?v=9"></script>
+</body>
+
+</html>

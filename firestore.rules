@@ -1,0 +1,74 @@
+// Seven 7s — Firestore Security Rules (informational copy)
+//
+// This file is NOT auto-deployed. It exists as a reference: copy these rules
+// into the Firebase console at:
+//   Firebase Console → Firestore Database → Rules → Edit rules
+// and click "Publish".
+//
+// Replace `<ADMIN_UID>` (in TWO places) with the Google UID of the admin
+// account that should be allowed to read live_guesses. The same value must
+// be set in admin.js (the `ADMIN_UID` constant).
+//
+// Setup checklist:
+//   1. In the Firebase console, enable Authentication → Sign-in method → Google.
+//   2. Open admin.html in a browser and click "Sign in with Google".
+//      The page will display your UID under "Setup needed".
+//   3. Replace ADMIN_UID in admin.js AND in the two `request.auth.uid == ...`
+//      checks below.
+//   4. Paste the resulting rules into the Firebase console and Publish.
+//   5. Hard-refresh admin.html.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Daily leaderboards (existing) -------------------------------------
+    // Anyone can read & post their own score. The schema is enforced on create.
+
+    match /daily_scores/{docId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly([
+        'date', 'nickname', 'time_seconds', 'guesses',
+        'green_hints', 'yellow_hints', 'total_hints',
+        'guess_log', 'timestamp'
+      ]);
+    }
+
+    match /daily_scores_wgpo/{docId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly([
+        'date', 'nickname', 'time_seconds', 'guesses',
+        'green_hints', 'yellow_hints', 'total_hints',
+        'guess_log', 'timestamp'
+      ]);
+    }
+
+    // --- Live guess log (new) ----------------------------------------------
+    // Every guess made during a daily puzzle (valid AND invalid) is logged
+    // here. ANY visitor can append to these collections (so we can capture
+    // the full session even from anonymous players), but only the admin UID
+    // can READ them — protecting player guess sequences and the
+    // not-in-lexicon corpus from public scraping.
+
+    match /live_guesses/{docId} {
+      allow read: if request.auth != null && request.auth.uid == '<ADMIN_UID>';
+      allow create: if request.resource.data.keys().hasOnly([
+        'date', 'variant', 'session_id', 'nickname',
+        'word', 'valid', 'reject_reason', 't',
+        'client_timestamp', 'timestamp'
+      ])
+        && request.resource.data.variant == 'common';
+    }
+
+    match /live_guesses_wgpo/{docId} {
+      allow read: if request.auth != null && request.auth.uid == '<ADMIN_UID>';
+      allow create: if request.resource.data.keys().hasOnly([
+        'date', 'variant', 'session_id', 'nickname',
+        'word', 'valid', 'reject_reason', 't',
+        'client_timestamp', 'timestamp'
+      ])
+        && request.resource.data.variant == 'wgpo';
+    }
+  }
+}

@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '8';
+const ASSET_VERSION = '9';
 
 // Global state
 let secretWords = [];
@@ -843,6 +843,80 @@ function recomputeYellowLetters() {
     }
 }
 
+// --- Live Guess Logging ---
+//
+// Every guess made during a *daily* puzzle (classic Daily or Daily Hard) — both
+// valid guesses and rejected attempts — is logged to a per-variant Firestore
+// collection (`live_guesses` / `live_guesses_wgpo`). Two separate use cases:
+//
+//   1. The admin page (admin.html) replays a player's full session, including
+//      all the words they tried but couldn't enter (lexicon misses, missing
+//      common letter, etc.). This requires writes per-guess, not just the
+//      one-shot `guess_log` snapshot at submission time.
+//
+//   2. Building a corpus of "words players tried but aren't in WOW24" — by
+//      filtering live_guesses to `reject_reason == 'not_in_lexicon'` and
+//      exporting (also via the admin page).
+//
+// Logging is fire-and-forget: failures are swallowed so a flaky network never
+// blocks the live game. Practice mode is intentionally NOT logged (it's
+// infinite + local; a single player could rack up huge write volume).
+
+function getOrCreateSessionId() {
+    let id = localStorage.getItem('seven_sevens_session_id');
+    if (!id) {
+        // crypto.randomUUID() exists on all modern browsers; fall back if missing.
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            id = window.crypto.randomUUID();
+        } else {
+            id = 'sid-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        }
+        localStorage.setItem('seven_sevens_session_id', id);
+    }
+    return id;
+}
+
+function liveGuessesCollection(variant) {
+    return variant === 'wgpo' ? 'live_guesses_wgpo' : 'live_guesses';
+}
+
+/**
+ * Fire-and-forget: write one guess to the live_guesses[_wgpo] collection.
+ * No-op if Firebase isn't initialized or we're not in a daily mode.
+ *
+ * @param {string} word  Lowercased word the player tried (may be < wordLen for
+ *                        wrong_length rejects; preserved as-typed so the admin
+ *                        can see what they actually entered).
+ * @param {boolean} valid  True if the guess passed all four validation checks.
+ * @param {string|null} rejectReason  null when valid; one of
+ *                        'wrong_length' | 'not_in_lexicon' | 'missing_common_letter' | 'duplicate'
+ * @param {number} elapsedSeconds  Timer elapsed at moment of guess (0 if timer
+ *                        hasn't started yet — common for invalid first attempts).
+ */
+function logLiveGuess(word, valid, rejectReason, elapsedSeconds) {
+    if (gameMode !== 'daily' && gameMode !== 'daily_wgpo') return;
+    if (typeof db === 'undefined' || !db) return;
+
+    const variant = currentDailyVariant;
+    const nickname = localStorage.getItem('seven_sevens_nickname') || null;
+    const payload = {
+        date: getTodayString(),
+        variant: variant,
+        session_id: getOrCreateSessionId(),
+        nickname: nickname,
+        word: String(word || ''),
+        valid: !!valid,
+        reject_reason: rejectReason || null,
+        t: Math.max(0, Math.round(elapsedSeconds || 0)),
+        client_timestamp: Date.now(),
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+
+    db.collection(liveGuessesCollection(variant)).add(payload).catch((e) => {
+        console.warn('logLiveGuess failed:', e && e.message);
+    });
+}
+
 // --- Guess Handling ---
 
 function handleGuess() {
@@ -850,31 +924,33 @@ function handleGuess() {
     const input = document.getElementById('guess-input');
     const guess = input.value.toLowerCase().trim();
 
-    const handleError = (msg) => {
+    const handleError = (msg, reason) => {
+        logLiveGuess(guess, false, reason, getElapsedSeconds());
         showMessage(msg);
         input.value = '';
         input.focus();
     };
 
     if (guess.length !== wordLen) {
-        return handleError(`Guess must be exactly ${wordLen} letters.`);
+        return handleError(`Guess must be exactly ${wordLen} letters.`, 'wrong_length');
     }
 
     if (!getActiveLexicon().includes(guess)) {
-        return handleError('Not a valid word in the list.');
+        return handleError('Not a valid word in the list.', 'not_in_lexicon');
     }
 
     if (!guess.includes(commonLetter)) {
-        return handleError(`Word must contain the common letter: ${commonLetter.toUpperCase()}`);
+        return handleError(`Word must contain the common letter: ${commonLetter.toUpperCase()}`, 'missing_common_letter');
     }
 
     if (guesses.includes(guess)) {
-        return handleError('You already guessed that word.');
+        return handleError('You already guessed that word.', 'duplicate');
     }
 
     startTimerIfNeeded();
 
     const elapsedAtGuess = getElapsedSeconds();
+    logLiveGuess(guess, true, null, elapsedAtGuess);
     guesses.push(guess);
     guessLog.push({ word: guess, t: elapsedAtGuess });
     updateGuessCountDisplay();

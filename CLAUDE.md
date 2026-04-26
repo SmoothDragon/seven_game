@@ -38,9 +38,12 @@ There are **four** top-level modes, exposed as buttons in `.mode-toggle`:
 ```
 seven_game/
 ├── index.html              # single-page UI
-├── style.css               # all styling
+├── style.css               # all styling (also serves admin.html)
 ├── script.js               # all game logic (vanilla JS, globals, no modules)
-├── firebase-config.js      # Firebase init + config (public keys only)
+├── firebase-config.js      # Firebase init + config (public keys only); shared by index.html and admin.html
+├── admin.html              # private admin dashboard (NOT linked from index.html)
+├── admin.js                # admin logic: Google sign-in, session list, full guess replay, CSV export
+├── firestore.rules         # informational copy of recommended Firestore security rules (NOT auto-deployed)
 ├── words.js                # const WORDS = [...]   7-letter lexicon, ordered by usage freq
 ├── words8.js               # const WORDS8 = [...]  8-letter lexicon, ordered by usage freq
 ├── scrabble_ranks.js       # const SCRABBLE_RANKS = [...]  parallel array of "probability" ranks
@@ -217,10 +220,12 @@ The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {
 
 `handleGuess()` validates the input in this exact order, with `showMessage` for errors:
 
-1. `guess.length !== wordLen` → "Guess must be exactly N letters."
-2. `!getActiveLexicon().includes(guess)` → "Not a valid word in the list."
-3. `!guess.includes(commonLetter)` → "Word must contain the common letter: X"
-4. `guesses.includes(guess)` → "You already guessed that word."
+1. `guess.length !== wordLen` → "Guess must be exactly N letters." (reject_reason `'wrong_length'`)
+2. `!getActiveLexicon().includes(guess)` → "Not a valid word in the list." (`'not_in_lexicon'`)
+3. `!guess.includes(commonLetter)` → "Word must contain the common letter: X" (`'missing_common_letter'`)
+4. `guesses.includes(guess)` → "You already guessed that word." (`'duplicate'`)
+
+**Live-guess logging.** Every call to `handleGuess` — both the four reject paths and the success path — invokes `logLiveGuess(word, valid, rejectReason, elapsedSeconds)`, which fires off a Firestore `add()` to `live_guesses` (classic Daily) or `live_guesses_wgpo` (Daily Hard) **only when `gameMode === 'daily' || gameMode === 'daily_wgpo'`** (Practice and Past 7 are not logged). Logging is fire-and-forget: any rejection or network failure is caught and ignored so a flaky connection never blocks the live game. See §11 for the schema and the admin page that consumes these collections.
 
 On success: start the timer if not running, capture `elapsedAtGuess = getElapsedSeconds()`, push the guess onto `guesses`, append `{word: guess, t: elapsedAtGuess}` onto `guessLog`, increment the display, call `processGuess(guess)`, update keyboard colors, prepend an `<li>` to the appropriate history list (`#daily-guess-history` in daily, `#guess-history` in practice) that includes a hover tooltip `.guess-tooltip` whose content is fetched by `fetchDefinition(guess, tooltip)`. Re-render the board and check win condition.
 
@@ -418,6 +423,26 @@ match /daily_scores_wgpo/{docId} {
 }
 ```
 
+In addition to the two daily score collections above, the project has **two parallel "live guess log" collections** — `live_guesses` (classic Daily) and `live_guesses_wgpo` (Daily Hard) — that record every guess the player makes during a daily puzzle (both valid guesses *and* invalid attempts). These power the admin replay viewer described in §11. Document shape:
+
+```js
+{
+  date: 'YYYY-MM-DD',
+  variant: 'common' | 'wgpo',
+  session_id: string,        // anonymous device id (UUID), in localStorage('seven_sevens_session_id')
+  nickname: string | null,   // present iff the player has already submitted a daily score in some prior session
+  word: string,              // the player's typed input as-rejected/accepted (lowercase, may be < 7 chars for wrong_length rejects)
+  valid: boolean,            // true iff the guess passed all four validation checks
+  reject_reason:             // null when valid; otherwise one of the four strings below
+    'wrong_length' | 'not_in_lexicon' | 'missing_common_letter' | 'duplicate' | null,
+  t: number,                 // elapsed timer seconds at the moment of guess (0 if timer hadn't started)
+  client_timestamp: number,  // Date.now() at write time, ms-resolution sort key
+  timestamp: serverTimestamp()
+}
+```
+
+The two `live_guesses*` collections are read-restricted: anyone may **create** documents (so anonymous players can be logged), but only the admin's authenticated UID may **read** them. See `firestore.rules` in the repo for the full ruleset, and §11 for how to set the admin UID.
+
 ### 6.3 Submit flow
 
 `showNicknameModal()` → `saveNickname()` trims the value, stores it in localStorage, hides the modal, then `submitScore(nickname)`. The whole flow is variant-aware via `currentDailyVariant`:
@@ -499,8 +524,9 @@ To recreate this project from scratch:
    - Every valid guess must be appended to both `guesses` and `guessLog` (with elapsed seconds at that moment), and `guess_log` must be included in the Firestore submission payload — otherwise Past 7 replays will appear empty.
    - `pickPuzzle`, `puzzleForDate`, and `puzzleWgpoForDate` must all be pure (no global writes) so Past 7 can derive any past day's letter/secrets for either variant without clobbering the current game. Classic Daily's seed must remain exactly `seedForDateStr(dateStr)` to preserve replay-compatibility with existing `daily_scores` documents.
    - `puzzleWgpoForDate` must pass the classic day's common letter as `excludeLetter` to `pickPuzzle`, guaranteeing the two daily variants never share a letter on the same date.
-7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **two** Firestore collections: `daily_scores` (classic Daily) and `daily_scores_wgpo` (Daily Hard). Apply the same security rules to both. Recommended: allow `read` to anyone, allow `create` when the document schema validates (see §6.2); the client already enforces one submission per user per variant per day via separate `localStorage` flags.
+7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **four** Firestore collections: `daily_scores` and `daily_scores_wgpo` (the two daily leaderboards) plus `live_guesses` and `live_guesses_wgpo` (the two per-variant live guess logs). Apply the rules in `firestore.rules` (or copy the snippets from §6.2 + §11). The two `daily_scores*` collections allow public `read` and schema-validated `create`; the two `live_guesses*` collections allow public `create` (so anonymous players can be logged) but restrict `read` to a single admin UID.
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
+9. (Optional) Set up the admin page (§11): in the Firebase console, enable Authentication → Google sign-in. Open `admin.html`, sign in once, copy the displayed UID into the `ADMIN_UID` constant in `admin.js` and into the two `request.auth.uid == '...'` checks in your Firestore rules, then redeploy the rules.
 
 ---
 
@@ -515,3 +541,73 @@ To recreate this project from scratch:
 - `escapeHtml` is used around any user-supplied string (`nickname`) before putting it into `innerHTML`.
 - Never block on Firestore: wrap every Firebase call in `try/catch`, degrade gracefully if `db` is null (e.g. "Firebase not configured" message in the scoreboard).
 - All event-listener setup in `setupEventListeners` goes through the small `on(id, event, handler)` helper, which null-checks the element and logs a warning instead of throwing. This means a stale cached `index.html` that's missing a newly-added button won't abort the rest of the listener setup — older controls keep working. `switchMode` uses the same null-safe pattern for its `classList.toggle` and `style.display` writes.
+
+---
+
+## 11. Admin page (`admin.html` / `admin.js`)
+
+A separate, **private** dashboard for the puzzle owner. It is intentionally NOT linked from `index.html`; auth is the primary gate, and the unguessable URL is just defense-in-depth. It serves two purposes:
+
+1. **Step through every player's full guess sequence** for any given day — including invalid attempts (which never appear in the public `daily_scores` `guess_log`). Useful for understanding how players approach the puzzle and for discovering interesting alternative words.
+2. **Export "not in lexicon" guesses as CSV** — a corpus of words players actually tried but the WGPO lexicon doesn't include. Useful for evaluating new candidate words or finding gaps.
+
+### 11.1 Auth & gates
+
+`admin.html` loads `firebase-app-compat`, `firebase-auth-compat`, `firebase-firestore-compat`, then `words.js`, `firebase-config.js`, and `admin.js`. On `DOMContentLoaded`, `bootstrap()` calls `initFirebase()` (from `firebase-config.js`) and registers an `onAuthStateChanged` handler. There are four UI states, exactly one of which is visible at a time:
+
+- `#admin-signin-gate` — not signed in. Click the button to invoke `firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())`.
+- `#admin-setup-gate` — signed in, but `ADMIN_UID === '__SET_ME__'` in `admin.js`. Displays the user's UID and walks them through editing `admin.js` and `firestore.rules`.
+- `#admin-denied-gate` — signed in, but `currentUser.uid !== ADMIN_UID`. Displays the user's UID for diagnostics. Sign-out button still visible in the header.
+- `#admin-dashboard` — signed in and authorized. The full admin UI renders.
+
+The single source of truth for "am I the admin?" is the `ADMIN_UID` constant in `admin.js`. Keep that constant in sync with the two `request.auth.uid == '<ADMIN_UID>'` checks in `firestore.rules`. There is no environment file or build-time substitution — both files are edited by hand once.
+
+### 11.2 Dashboard controls
+
+Three controls along the top:
+
+- `#admin-date` — `<input type="date">` defaulting to today, `max` clamped to today (since future dates have no data).
+- `.admin-variant-toggle` — two-button toggle (`#admin-variant-common` / `#admin-variant-wgpo`). Each click calls `switchVariant(v)` which updates `selectedVariant` and re-runs `loadDashboardData()`.
+- `#admin-export-lexicon` — fetches **both** `live_guesses` and `live_guesses_wgpo` collections in parallel, filters to `reject_reason == 'not_in_lexicon'`, sorts by date then by `client_timestamp`, and downloads a CSV with columns `date, variant, word, session_id, nickname, t_seconds, client_timestamp_iso`. The export is **all dates and both variants** in a single file regardless of the currently selected date — the date/variant pickers only affect the replay viewer below, not the export.
+
+`#admin-puzzle-info` re-derives and displays the puzzle for the selected (date, variant): common letter and the seven secret words, by calling `puzzleForDateVariant(dateStr, variant)`.
+
+### 11.3 Puzzle reconstruction
+
+`admin.js` contains its own copies of `mulberry32`, `seedForDateStr`, `pickPuzzle`, and `puzzleForDateVariant`, **duplicated verbatim** from `script.js`. This is intentional — `admin.html` is a separate page that doesn't load `script.js` (which would try to attach event listeners to elements that don't exist on the admin page), and the project doesn't use modules. If those four functions or the wgpo seed-salt (`':wgpo'`) ever change in `script.js`, they must be updated in `admin.js` too, or daily-mode replays will silently mismatch.
+
+### 11.4 Loading & grouping live guesses
+
+`loadDashboardData()` queries `db.collection(liveGuessesCollection(selectedVariant)).where('date','==',selectedDate).get()` and feeds the results to `groupAndStat(docs)`:
+
+- Groups documents by `session_id`.
+- Within each session, sorts entries ascending by `entrySortKey(e)` — `client_timestamp` if present, else `timestamp.toMillis()`, else `t * 1000`, else 0. This handles old data missing some fields without crashing.
+- Picks the most recent non-null `nickname` seen in that session as the displayed name.
+- Computes `stats`: `validCount`, `invalidCount`, `rejectCounts` (per reject reason), `elapsed` (last `t`), and `finished` (true iff simulating the session's valid guesses on a fresh board fully reveals it).
+- Sorts sessions: finished first, then by `validCount` descending, then by first-activity ascending.
+
+### 11.5 Sessions list
+
+Each session is rendered as an `.admin-session-card` (left column) showing the nickname (or "anonymous"), a `Finished` / `In progress` badge, valid/invalid guess counts, the `not in lexicon` count if non-zero, the elapsed time, and a truncated session id. Clicking a card calls `openSession(idx)`.
+
+### 11.6 Replay viewer
+
+The replay panel reuses the same DOM idiom as Past 7 — vertical stepper to the left of the 7×7 board, column-feedback strip below, guess log underneath — but the entry data structure is richer because it includes invalid attempts. State:
+
+- `replayBoard` — `{ revealed, wrongPos, columnReds, validApplied[] }` rebuilt from scratch on every `jumpReplayTo(step)` call. Like Past 7, we don't try to "un-apply" guesses; we just replay valid ones from the start up to `step - 1`.
+- `replayStep` — index of the next entry to apply (0..N).
+- `replayDiff` — produced by `diffBoards(before, after, guessWord, valid)`. For valid entries it captures the new greens, yellows, and reds produced by that guess; for invalid entries it returns empty sets but still carries `guessWord` so the renderer can show ghost letters in unfinished rows. For invalid entries the board does NOT advance — `before` and `after` are the same snapshot.
+
+`renderReplayBoard()` mirrors Past 7's renderer (greens, yellow grid, column reds, ghost letters, `.diff-new` highlighting). `renderReplayLog()` adds two extras for the admin view:
+
+- `.admin-invalid` class on `<li>` elements for invalid entries, which gives them a light-red wash and the attempted word a strikethrough.
+- A `.admin-reject-reason` badge at the right showing the human-readable reason (`'not in lexicon'`, `'duplicate'`, …).
+
+Keyboard shortcuts: while the dashboard is visible, `ArrowUp` / `ArrowDown` step the replay backward/forward. Clicking any log entry jumps to that step.
+
+### 11.7 Cost / privacy notes
+
+- Each daily-mode guess (valid or invalid) is one Firestore write. Free tier (20K writes/day) covers a few hundred daily players easily.
+- Practice mode is **not** logged to keep write volume bounded — a single player could otherwise generate hundreds of guesses per session.
+- The `session_id` is a per-device anonymous UUID stored in `localStorage('seven_sevens_session_id')`. It rolls over if a player clears site data and is shared across the two daily variants on the same device.
+- `nickname` is captured from `localStorage('seven_sevens_nickname')` (the same value the player chose at score-submission time). For brand-new players who have never submitted, `nickname` will be `null` until they finish their first daily and submit.
