@@ -800,8 +800,6 @@ button.hint-btn:disabled {
     list-style: none;
     padding: 0;
     margin: 0;
-    max-height: 200px;
-    overflow-y: auto;
 }
 
 .daily-history-section li {
