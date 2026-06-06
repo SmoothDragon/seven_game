@@ -318,6 +318,46 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 `resetGameState()` clears all state arrays including `guessLog` (sized by current `wordLen`), rebuilds column feedback DOM, clears input/history/board/keyboard classes, resets hint counts, stops timer, shows board, re-syncs `#guess-input.maxLength` and placeholder, and clears the fireworks overlay.
 
+### 5.13a Daily-game persistence
+
+**Goal**: a player who closes the browser mid-puzzle (or after finishing) can revisit the page later in the same day and resume / review exactly where they left off. Two separate buckets — one per variant — keyed by date, so the classic Daily and Daily Hard are tracked independently and old days don't collide. Practice is **not** persisted (each Practice game is random and disposable).
+
+**Storage**: localStorage, key `seven_sevens_daily_state_<common|wgpo>_<YYYY-MM-DD>` via `dailyStateKey(variant, dateStr)`. The payload object:
+
+```js
+{
+  date: 'YYYY-MM-DD',
+  variant: 'common' | 'wgpo',
+  commonLetter: 'e',            // for sanity-check on restore
+  secretWordsHash: 'a,b,c,d,e,f,g',  // comma-joined secrets; defensive vs. algorithm drift
+  guesses: ['preview', 'present', ...],
+  guessLog: [{ word, t }, ...],
+  revealedLetters: [['p','','','','','',''], ...],  // 7×7
+  wrongPositionLetters: ['ae', 'i', ...],            // 7 strings
+  columnRedLetters: ['xy', '', ...],                 // 7 strings
+  greenHintCount: 0,
+  yellowHintCount: 1,
+  elapsedSeconds: 142,
+  finished: false,
+  finalElapsedSeconds: 0,  // only meaningful when finished===true
+}
+```
+
+**Save**: `saveDailyState()` is called at the end of `handleGuess` (after `checkWinCondition`, so the `finished: true` final state is captured by the same call), at the end of `useGreenHint`, and at the end of `useYellowHint`. Early-returns on non-daily modes. Wraps the localStorage write in try/catch so a `QuotaExceededError` (or any other failure) does not break gameplay.
+
+**Restore**: `initDailyVariant(variant)` calls `loadDailyState(variant, todayStr)` *after* setting `commonLetter` + `secretWords`. If a non-null payload is returned, `restoreDailyState(state)` validates the puzzle hasn't drifted (matches `commonLetter` and `secretWordsHash` against the freshly-derived puzzle), then:
+
+- Copies `guesses` / `guessLog` / `revealedLetters` / `wrongPositionLetters` / `columnRedLetters` / hint counts back into globals.
+- Parks `state.elapsedSeconds` into `pausedElapsed`, leaves `startTime = null`, and clears any live `timerInterval` — so the timer is **paused on restore**. The next guess or hint call to `startTimerIfNeeded()` re-arms it; `getElapsedSeconds()` then naturally adds `(now - startTime) + pausedElapsed`. Writes the formatted `mm:ss` straight into `#timer` via `renderTimerFromElapsed`.
+- Rebuilds the `#daily-guess-history` `<ul>` by iterating `guesses` and calling `addGuessToDailyHistoryList(guess)` for each — extracted from `handleGuess` so both the live and restore paths use the same DOM construction (including the `.guess-tooltip` fetched via `fetchDefinition`).
+- If `state.finished` is true, sets `gameOver = true`, restores `finalElapsedSeconds`, and disables `#guess-btn`. Does **not** auto-show the nickname modal — the player presumably dismissed it the first time, and the modal lacks a cancel button.
+
+`updateKeyboardColors()` is called once *after* the restore so the keyboard reflects the restored guesses. `renderBoard()` is called once afterwards regardless (so a no-save first visit also renders correctly).
+
+**Drift safety**: if either `commonLetter` or `secretWordsHash` differ from the live puzzle (algorithm bump or word-list change between visits), `restoreDailyState` discards the stale payload via `discardDailyState` and returns false; the game starts fresh as if there were no saved state. Old days' keys are simply left in localStorage — they take ~1KB each and the per-origin quota is in the megabytes, so no cleanup pass is required.
+
+**One-call-covers-all**: because `saveDailyState` is invoked from the end of every state-changing path (handleGuess + the two hint functions) **after** `checkWinCondition`, there is no separate "final save on win" code path. The same save call captures `finished: true` automatically.
+
 ### 5.14 Past 7 mode & replay
 
 **Date selection.** `past7Dates()` returns 7 local-date strings going back from yesterday (not today) to 7 days ago, most recent first, in `YYYY-MM-DD` form.

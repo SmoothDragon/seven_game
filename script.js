@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '10';
+const ASSET_VERSION = '11';
 
 // Global state
 let secretWords = [];
@@ -379,6 +379,151 @@ function updateScoreboardHeading(variant) {
     if (h) h.textContent = variant === 'wgpo' ? "Today's Tough Top Ten" : "Today's Top Ten";
 }
 
+// --- Daily Game Persistence ---
+//
+// Save in-progress (and finished) daily games to localStorage so that
+// closing the browser and revisiting later on the same date restores the
+// player to exactly where they left off. Persists per (variant, date) tuple,
+// so the two daily variants are tracked independently and old days don't
+// collide. Practice mode is intentionally NOT persisted — each Practice game
+// is random and disposable.
+//
+// We store the full computed board state (revealed / yellow / red arrays)
+// rather than just the guess history because hints reveal *random* cells,
+// so replaying guesses alone would re-roll the hint reveals on every restore.
+
+function dailyStateKey(variant, dateStr) {
+    return `seven_sevens_daily_state_${variant === 'wgpo' ? 'wgpo' : 'common'}_${dateStr}`;
+}
+
+function saveDailyState() {
+    if (gameMode !== 'daily' && gameMode !== 'daily_wgpo') return;
+    try {
+        const dateStr = getTodayString();
+        const payload = {
+            date: dateStr,
+            variant: currentDailyVariant,
+            commonLetter: commonLetter,
+            // Defensive hash so we can detect (and discard) saved state from a
+            // previous algorithm version if the same letter happens to be picked
+            // but the secret-word selection differs.
+            secretWordsHash: secretWords.join(','),
+            guesses: [...guesses],
+            guessLog: guessLog.map(g => ({ word: g.word, t: Math.max(0, Math.round(g.t)) })),
+            revealedLetters: revealedLetters.map(r => [...r]),
+            wrongPositionLetters: [...wrongPositionLetters],
+            columnRedLetters: [...columnRedLetters],
+            greenHintCount,
+            yellowHintCount,
+            elapsedSeconds: Math.max(0, Math.round(getElapsedSeconds())),
+            finished: gameOver,
+            finalElapsedSeconds: gameOver ? Math.max(0, Math.round(finalElapsedSeconds)) : 0,
+        };
+        localStorage.setItem(dailyStateKey(currentDailyVariant, dateStr), JSON.stringify(payload));
+    } catch (e) {
+        // QuotaExceededError or JSON failure — non-fatal, the live game continues without saving.
+        console.warn('saveDailyState failed:', e && e.message);
+    }
+}
+
+function loadDailyState(variant, dateStr) {
+    try {
+        const raw = localStorage.getItem(dailyStateKey(variant, dateStr));
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || parsed.date !== dateStr || parsed.variant !== variant) return null;
+        return parsed;
+    } catch (e) {
+        console.warn('loadDailyState failed:', e && e.message);
+        return null;
+    }
+}
+
+function discardDailyState(variant, dateStr) {
+    try { localStorage.removeItem(dailyStateKey(variant, dateStr)); } catch (e) { /* ignore */ }
+}
+
+/**
+ * Populate game globals + DOM from a previously-saved daily state object.
+ * MUST be called *after* `commonLetter` and `secretWords` are set for the
+ * current puzzle (so we can validate the saved state matches the puzzle).
+ * Returns true if state was applied, false if it was discarded as stale.
+ */
+function restoreDailyState(state) {
+    const todayStr = getTodayString();
+    // Guard against drift: if commonLetter or the secret-word set has changed
+    // since saving (algorithm bump, etc.), discard the stale state and start fresh.
+    if (state.commonLetter !== commonLetter || state.secretWordsHash !== secretWords.join(',')) {
+        discardDailyState(currentDailyVariant, todayStr);
+        return false;
+    }
+
+    guesses = Array.isArray(state.guesses) ? [...state.guesses] : [];
+    guessLog = Array.isArray(state.guessLog)
+        ? state.guessLog.map(g => ({ word: String(g.word || ''), t: Number(g.t) || 0 }))
+        : [];
+    revealedLetters = Array.isArray(state.revealedLetters)
+        ? state.revealedLetters.map(r => Array.isArray(r) ? [...r] : Array(wordLen).fill(''))
+        : Array(wordLen).fill(null).map(() => Array(wordLen).fill(''));
+    wrongPositionLetters = Array.isArray(state.wrongPositionLetters)
+        ? [...state.wrongPositionLetters]
+        : Array(wordLen).fill('');
+    columnRedLetters = Array.isArray(state.columnRedLetters)
+        ? [...state.columnRedLetters]
+        : Array(wordLen).fill('');
+    greenHintCount = Number(state.greenHintCount) || 0;
+    yellowHintCount = Number(state.yellowHintCount) || 0;
+
+    // Restore elapsed time: timer is NOT running on restore. We park the
+    // previously-accumulated seconds into `pausedElapsed`; the next guess/hint
+    // will call startTimerIfNeeded() which sets startTime=Date.now(), and
+    // getElapsedSeconds() correctly adds (now-startTime) on top of pausedElapsed.
+    pausedElapsed = Math.max(0, Math.round(Number(state.elapsedSeconds) || 0));
+    startTime = null;
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    renderTimerFromElapsed(pausedElapsed);
+
+    updateGuessCountDisplay();
+    document.getElementById('green-hint-count').textContent = String(greenHintCount);
+    document.getElementById('yellow-hint-count').textContent = String(yellowHintCount);
+
+    // Rebuild the daily history list (newest on top — matches live behavior).
+    const historyList = document.getElementById('daily-guess-history');
+    if (historyList) {
+        historyList.innerHTML = '';
+        for (const g of guesses) addGuessToDailyHistoryList(g);
+    }
+
+    if (state.finished) {
+        gameOver = true;
+        finalElapsedSeconds = Number(state.finalElapsedSeconds) || pausedElapsed;
+        const btn = document.getElementById('guess-btn');
+        if (btn) btn.disabled = true;
+    }
+
+    return true;
+}
+
+function renderTimerFromElapsed(elapsed) {
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    const t = document.getElementById('timer');
+    if (t) t.textContent = `${m}:${s}`;
+}
+
+function addGuessToDailyHistoryList(guess) {
+    const historyList = document.getElementById('daily-guess-history');
+    if (!historyList) return;
+    const li = document.createElement('li');
+    li.textContent = guess;
+    const tooltip = document.createElement('div');
+    tooltip.className = 'guess-tooltip';
+    tooltip.innerHTML = '<em>Loading...</em>';
+    li.appendChild(tooltip);
+    fetchDefinition(guess, tooltip);
+    historyList.prepend(li);
+}
+
 function initDailyGame() {
     initDailyVariant('common');
 }
@@ -401,6 +546,17 @@ function initDailyVariant(variant) {
 
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     updateScoreboardHeading(variant);
+
+    // Restore any in-progress (or finished) game saved earlier today on this device.
+    // Must happen AFTER commonLetter/secretWords are set so the saved state can be
+    // validated against the current puzzle. We only update the keyboard colors and
+    // re-render once: after the restore, when state is final.
+    const saved = loadDailyState(variant, todayStr);
+    if (saved) {
+        restoreDailyState(saved);
+        updateKeyboardColors();
+    }
+
     renderBoard();
     fetchLeaderboard();
 
@@ -749,6 +905,7 @@ function useGreenHint() {
     updateKeyboardColors();
     renderBoard();
     checkWinCondition();
+    saveDailyState();
 }
 
 function useYellowHint() {
@@ -807,6 +964,7 @@ function useYellowHint() {
     computeColumnRedLetters();
     updateKeyboardColors();
     renderBoard();
+    saveDailyState();
 }
 
 function recomputeYellowLetters() {
@@ -956,24 +1114,29 @@ function handleGuess() {
     updateGuessCountDisplay();
     processGuess(guess);
     updateKeyboardColors();
-    
+
     const isDailyMode = gameMode === 'daily' || gameMode === 'daily_wgpo';
-    const historyId = isDailyMode ? 'daily-guess-history' : 'guess-history';
-    const historyList = document.getElementById(historyId);
-    const li = document.createElement('li');
-    li.textContent = guess;
-    
-    const tooltip = document.createElement('div');
-    tooltip.className = 'guess-tooltip';
-    tooltip.innerHTML = '<em>Loading...</em>';
-    li.appendChild(tooltip);
-    fetchDefinition(guess, tooltip);
-    
-    historyList.prepend(li);
+    if (isDailyMode) {
+        addGuessToDailyHistoryList(guess);
+    } else {
+        const historyList = document.getElementById('guess-history');
+        const li = document.createElement('li');
+        li.textContent = guess;
+        const tooltip = document.createElement('div');
+        tooltip.className = 'guess-tooltip';
+        tooltip.innerHTML = '<em>Loading...</em>';
+        li.appendChild(tooltip);
+        fetchDefinition(guess, tooltip);
+        historyList.prepend(li);
+    }
 
     input.value = '';
     renderBoard();
     checkWinCondition();
+    // Persist for daily modes. Practice is not persisted. checkWinCondition has
+    // already flipped gameOver if needed, so this single call covers both the
+    // mid-game and end-of-game saves.
+    saveDailyState();
     input.focus();
 }
 
