@@ -93,7 +93,7 @@ One page, one `<body>`. Major elements, in order:
        - `#past7-replay.past7-replay.hidden` — the replay panel, shown when a card is clicked. Contains `#past7-back-btn`, `#past7-replay-header`, and a `.past7-replay-body` with a horizontal `.past7-replay-stage` row — inside that, the vertical stepper `#past7-replay-controls` (stacked top-to-bottom: `#past7-replay-prev` (`▲`) · `#past7-replay-step` counter · `#past7-replay-next` (`▼`)) sits to the **left** of `#past7-replay-board`. Below the stage sit the hint paragraph and `ul#past7-replay-log.past7-replay-log`.
    - **Sidebars** (outside `.container` but inside `.main-wrapper`):
      - `#sidebar-history` (`.sidebar.history`, only visible in practice mode, `display:none` by default) containing `<h3>Guess History</h3>` and `<ul id="guess-history">`.
-     - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) with `<h3>Today's Top Ten</h3>` (rewritten to `"Today's Tough Top Ten"` when viewing the Daily Hard variant), `#scoreboard-list`, and a `.daily-history-section` with `<h4>Your Guesses</h4>` + `<ul id="daily-guess-history">`.
+     - `#sidebar-scoreboard` (`.sidebar`, only visible in daily mode) contains, in order: a `#daily-view-toggle-btn` (hidden until the puzzle is complete), a `#scoreboard-block` wrapper holding `<h3>Today's Top Ten</h3>` (rewritten to `"Today's Tough Top Ten"` for Daily Hard) + `#scoreboard-list`, and a `.daily-history-section` (`#daily-history-section`) with `<h4 id="daily-history-title">Your Guesses</h4>`, a hidden `#daily-review-hint` paragraph, and `<ul id="daily-guess-history">`. The sidebar has **three** layouts driven by `updateDailySidebarView()` (see §5.13b): during play only the guess list shows (leaderboard hidden); after completion the default view shows the leaderboard + a "Review your game" button; toggling that button enters a move-by-move review where the leaderboard is hidden and the guess list becomes an interactive stepper and the button reads "Today's Top Ten".
 3. **Nickname Modal** `#nickname-modal` (`.modal-overlay.hidden` by default): `.modal-content` containing `<h2>Puzzle Complete!</h2>`, a prompt, `#nickname-input` (maxlength 20), and `#nickname-save-btn`.
 4. **Splash/Rules Overlay** `#splash-overlay` (visible initially; click-anywhere dismisses) containing an `#splash-content` block with the rules (see section 7) and a link to the WGPO official word list.
 5. **Script tags**, in this order:
@@ -227,7 +227,7 @@ The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {
 
 **Live-guess logging.** Every call to `handleGuess` — both the four reject paths and the success path — invokes `logLiveGuess(word, valid, rejectReason, elapsedSeconds)`, which fires off a Firestore `add()` to `live_guesses` (classic Daily) or `live_guesses_wgpo` (Daily Hard) **only when `gameMode === 'daily' || gameMode === 'daily_wgpo'`** (Practice and Past 7 are not logged). Logging is fire-and-forget: any rejection or network failure is caught and ignored so a flaky connection never blocks the live game. See §11 for the schema and the admin page that consumes these collections.
 
-On success: start the timer if not running, capture `elapsedAtGuess = getElapsedSeconds()`, push the guess onto `guesses`, append `{word: guess, t: elapsedAtGuess}` onto `guessLog`, increment the display, call `processGuess(guess)`, update keyboard colors, prepend an `<li>` to the appropriate history list (`#daily-guess-history` in daily, `#guess-history` in practice) that includes a hover tooltip `.guess-tooltip` whose content is fetched by `fetchDefinition(guess, tooltip)`. Re-render the board and check win condition.
+On success: start the timer if not running, capture `elapsedAtGuess = getElapsedSeconds()`, push the guess onto `guesses`, append `{word: guess, t: elapsedAtGuess}` onto `guessLog`, increment the display, call `processGuess(guess)`, update keyboard colors, prepend an `<li>` to the appropriate history list (`#daily-guess-history` in daily via `addGuessToDailyHistoryList(word, t)` which renders a `mm:ss` timestamp + the word; `#guess-history` in practice) that includes a hover tooltip `.guess-tooltip` whose content is fetched by `fetchDefinition(guess, tooltip)`. In daily modes the guess is also appended to `dailyEvents` as `{type:'guess', word, t}` for the post-game review (§5.13b). Re-render the board and check win condition.
 
 `processGuess(guess)` does four passes across all `wordLen` rows:
 
@@ -332,6 +332,7 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
   secretWordsHash: 'a,b,c,d,e,f,g',  // comma-joined secrets; defensive vs. algorithm drift
   guesses: ['preview', 'present', ...],
   guessLog: [{ word, t }, ...],
+  events: [{ type:'guess', word, t }, { type:'green', col, letter, t }, ...],  // move timeline for review (§5.13b)
   revealedLetters: [['p','','','','','',''], ...],  // 7×7
   wrongPositionLetters: ['ae', 'i', ...],            // 7 strings
   columnRedLetters: ['xy', '', ...],                 // 7 strings
@@ -347,16 +348,34 @@ Helper `incompleteWordRowContainsChar(char)` returns true when some row whose se
 
 **Restore**: `initDailyVariant(variant)` calls `loadDailyState(variant, todayStr)` *after* setting `commonLetter` + `secretWords`. If a non-null payload is returned, `restoreDailyState(state)` validates the puzzle hasn't drifted (matches `commonLetter` and `secretWordsHash` against the freshly-derived puzzle), then:
 
-- Copies `guesses` / `guessLog` / `revealedLetters` / `wrongPositionLetters` / `columnRedLetters` / hint counts back into globals.
+- Copies `guesses` / `guessLog` / `revealedLetters` / `wrongPositionLetters` / `columnRedLetters` / hint counts back into globals. Restores `dailyEvents` from `state.events`; if absent (pre-review-feature saves), falls back to deriving guess-only events from `guessLog` (exact when no hints were used).
 - Parks `state.elapsedSeconds` into `pausedElapsed`, leaves `startTime = null`, and clears any live `timerInterval` — so the timer is **paused on restore**. The next guess or hint call to `startTimerIfNeeded()` re-arms it; `getElapsedSeconds()` then naturally adds `(now - startTime) + pausedElapsed`. Writes the formatted `mm:ss` straight into `#timer` via `renderTimerFromElapsed`.
-- Rebuilds the `#daily-guess-history` `<ul>` by iterating `guesses` and calling `addGuessToDailyHistoryList(guess)` for each — extracted from `handleGuess` so both the live and restore paths use the same DOM construction (including the `.guess-tooltip` fetched via `fetchDefinition`).
+- Rebuilds the `#daily-guess-history` `<ul>` by iterating `guessLog` and calling `addGuessToDailyHistoryList(word, t)` for each — extracted from `handleGuess` so both the live and restore paths use the same DOM construction (timestamp + word + `.guess-tooltip` fetched via `fetchDefinition`).
 - If `state.finished` is true, sets `gameOver = true`, restores `finalElapsedSeconds`, and disables `#guess-btn`. Does **not** auto-show the nickname modal — the player presumably dismissed it the first time, and the modal lacks a cancel button.
 
-`updateKeyboardColors()` is called once *after* the restore so the keyboard reflects the restored guesses. `renderBoard()` is called once afterwards regardless (so a no-save first visit also renders correctly).
+`updateKeyboardColors()` is called once *after* the restore so the keyboard reflects the restored guesses. `renderBoard()` is called once afterwards regardless (so a no-save first visit also renders correctly). Finally `updateDailySidebarView()` (§5.13b) sets the sidebar to the playing view or, for a restored finished game, the completed default view.
 
 **Drift safety**: if either `commonLetter` or `secretWordsHash` differ from the live puzzle (algorithm bump or word-list change between visits), `restoreDailyState` discards the stale payload via `discardDailyState` and returns false; the game starts fresh as if there were no saved state. Old days' keys are simply left in localStorage — they take ~1KB each and the per-origin quota is in the megabytes, so no cleanup pass is required.
 
 **One-call-covers-all**: because `saveDailyState` is invoked from the end of every state-changing path (handleGuess + the two hint functions) **after** `checkWinCondition`, there is no separate "final save on win" code path. The same save call captures `finished: true` automatically.
+
+### 5.13b Daily post-game review
+
+Once a daily puzzle is complete the player can review their own solve move-by-move. The sidebar (`#sidebar-scoreboard`) has **three** states, all driven by `updateDailySidebarView()` (the single source of truth):
+
+1. **Playing** (`!gameOver`): the `#daily-view-toggle-btn` and `#scoreboard-block` (leaderboard) are hidden; only `#daily-history-section` ("Your Guesses") shows. So the leaderboard is **not** revealed until the puzzle is solved.
+2. **Complete — default view** (`gameOver && !dailyReviewMode`): the toggle button shows reading "Review your game", the leaderboard shows, the guess list is hidden, and the main board shows the completed final board (rendered from the live globals).
+3. **Complete — review view** (`gameOver && dailyReviewMode`): the toggle button reads "Today's Top Ten", the leaderboard is hidden, and `#daily-history-section` shows the full **move timeline** as an interactive stepper; the main `#game-board` shows the reconstructed state after the selected move.
+
+**The move timeline (`dailyEvents`)**. During daily play, every state-changing move is appended to `dailyEvents`: `{type:'guess', word, t}` (in `handleGuess`), `{type:'green', col, letter, t}` (in `useGreenHint`, recording the chosen column + letter), and `{type:'yellow', letter, t}` (in `useYellowHint`). Recording the hint *choices* (not just counts) is what makes the review reproducible — hints reveal otherwise-random cells, so replaying `guesses` alone would not reconstruct a hinted board. `dailyEvents` is persisted in the saved-state payload (§5.13a) and reset in `resetGameState`.
+
+**Reconstruction**. `buildDailyReviewState(step)` replays the first `step` events onto a fresh board accumulator (`newDailyReviewBoard`) using standalone duplicates of the live logic — `applyDailyReviewEvent` (guess → greens/yellows; green hint → reveal in column; yellow hint → add yellow), `dailyReviewRecomputeYellows` (row-local + global prune) and `dailyReviewRecomputeReds` (column reds from `guessesApplied`). It returns `{board, diff, ghostWord}` where `diff` (via `dailyReviewDiff`) is the greens/yellows/reds produced by the **last** applied event and `ghostWord` is that event's word if it was a guess. These duplicate `processGuess` / `recomputeYellowLetters` / `computeColumnRedLetters` rather than refactoring them, keeping the live path untouched (same philosophy as the Past 7 replay engine).
+
+**Rendering**. `renderDailyReviewBoard()` draws the reconstructed board into the **main** `#game-board` (and the existing `#col-j` feedback divs), reusing the generic `.diff-new` highlight and `.replay-ghost` letter classes from the Past 7 viewer. `renderDailyReviewList()` rebuilds `#daily-guess-history` as the chronological (oldest-first) timeline: each `<li>` carries `data-step`, guesses show timestamp + uppercase word, hints show "Green hint · X" / "Yellow hint · X" with a `.hint-entry` tint; clicking any row calls `jumpDailyReviewTo(step)`.
+
+**Navigation**. `jumpDailyReviewTo(step)` clamps to `[0, dailyEvents.length]`, re-renders the board, and updates the `.current-step` highlight (scrolling it into view). `dailyReviewStep` is the number of events applied. Keyboard `ArrowUp` = previous move (`step-1`), `ArrowDown` = next (`step+1`), active only while `gameOver && dailyReviewMode` in a daily mode — matching Past 7's ↑/↓ convention. The live "any letter refocuses the input" document handler early-returns on `gameOver`, so it never conflicts.
+
+**Toggling**. `toggleDailyView()` flips `dailyReviewMode`. Entering review calls `renderDailyReviewList()` then `jumpDailyReviewTo(1)` (start at the first move so the board visibly differs from the completed view). Exiting calls `renderBoard()` to restore the final board from the untouched live globals. Both paths end with `updateDailySidebarView()`. The completed default view is (re-)entered automatically by `checkWinCondition` on solve and by `initDailyVariant` when a finished game is restored.
 
 ### 5.14 Past 7 mode & replay
 

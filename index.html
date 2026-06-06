@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Seven 7s</title>
     <!-- Bump ?v= on every release to cache-bust GitHub Pages. Keep all asset versions in sync. -->
-    <link rel="stylesheet" href="style.css?v=11">
+    <link rel="stylesheet" href="style.css?v=12">
 </head>
 
 <body>
@@ -151,12 +151,20 @@
         </div>
 
         <div class="sidebar" id="sidebar-scoreboard">
-            <h3>Today's Top Ten</h3>
-            <div id="scoreboard-list">
-                <p style="text-align:center; color:#888;">Loading...</p>
+            <!-- Shown only after the daily puzzle is complete. Toggles between the
+                 completed-board + Top Ten view and the move-by-move review view. -->
+            <button id="daily-view-toggle-btn" class="daily-view-toggle-btn hidden">Review your game</button>
+            <div id="scoreboard-block">
+                <h3>Today's Top Ten</h3>
+                <div id="scoreboard-list">
+                    <p style="text-align:center; color:#888;">Loading...</p>
+                </div>
             </div>
-            <div class="daily-history-section">
-                <h4>Your Guesses</h4>
+            <div class="daily-history-section" id="daily-history-section">
+                <h4 id="daily-history-title">Your Guesses</h4>
+                <p id="daily-review-hint" class="daily-review-hint hidden">
+                    Click any move or use the ↑ / ↓ arrows to step through your game.
+                </p>
                 <ul id="daily-guess-history"></ul>
             </div>
         </div>
@@ -200,10 +208,10 @@
 
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-    <script src="words.js?v=11"></script>
-    <script src="scrabble_ranks.js?v=11"></script>
-    <script src="firebase-config.js?v=11"></script>
-    <script src="script.js?v=11"></script>
+    <script src="words.js?v=12"></script>
+    <script src="scrabble_ranks.js?v=12"></script>
+    <script src="firebase-config.js?v=12"></script>
+    <script src="script.js?v=12"></script>
 </body>
 
 </html>

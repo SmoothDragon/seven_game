@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '11';
+const ASSET_VERSION = '12';
 
 // Global state
 let secretWords = [];
@@ -10,6 +10,10 @@ let wrongPositionLetters = Array(7).fill('');
 let columnRedLetters = Array(7).fill('');
 let guesses = [];
 let guessLog = []; // Array of { word, t } where t = elapsed seconds at time of guess
+// Ordered timeline of every state-changing move in a daily game — guesses AND
+// hints — so the post-game review can reconstruct the board after any move.
+// Entries: { type:'guess', word, t } | { type:'green', col, letter, t } | { type:'yellow', letter, t }.
+let dailyEvents = [];
 let gameOver = false;
 let startTime;
 let timerInterval;
@@ -25,6 +29,13 @@ let secondarySortKey = 'guesses'; // 'guesses' or 'time'
 let wordLen = 7;
 let fireworksTimerId = null;
 let fireworksEpoch = 0;
+
+// Daily post-game review ("Review your game") state. Only meaningful once a
+// daily puzzle is complete (gameOver === true) and the user has toggled into
+// review mode. The review reconstructs the board after the first N timeline
+// events into the main #game-board, leaving the live globals untouched.
+let dailyReviewMode = false;
+let dailyReviewStep = 0; // how many timeline events are currently applied (0..dailyEvents.length)
 
 let words8LexiconLoadPromise = null;
 
@@ -279,6 +290,9 @@ function resetGameState() {
     gameOver = false;
     guesses = [];
     guessLog = [];
+    dailyEvents = [];
+    dailyReviewMode = false;
+    dailyReviewStep = 0;
     revealedLetters = Array(wordLen).fill(null).map(() => Array(wordLen).fill(''));
     wrongPositionLetters = Array(wordLen).fill('');
     columnRedLetters = Array(wordLen).fill('');
@@ -410,6 +424,7 @@ function saveDailyState() {
             secretWordsHash: secretWords.join(','),
             guesses: [...guesses],
             guessLog: guessLog.map(g => ({ word: g.word, t: Math.max(0, Math.round(g.t)) })),
+            events: dailyEvents.map(e => ({ ...e, t: Math.max(0, Math.round(e.t)) })),
             revealedLetters: revealedLetters.map(r => [...r]),
             wrongPositionLetters: [...wrongPositionLetters],
             columnRedLetters: [...columnRedLetters],
@@ -462,6 +477,14 @@ function restoreDailyState(state) {
     guessLog = Array.isArray(state.guessLog)
         ? state.guessLog.map(g => ({ word: String(g.word || ''), t: Number(g.t) || 0 }))
         : [];
+    // Restore the move timeline used by the post-game review. Older saved states
+    // (pre-review-feature) won't have `events`; fall back to deriving guess-only
+    // events from guessLog, which is exact when no hints were used.
+    if (Array.isArray(state.events)) {
+        dailyEvents = state.events.map(e => ({ ...e, t: Number(e.t) || 0 }));
+    } else {
+        dailyEvents = guessLog.map(g => ({ type: 'guess', word: g.word, t: g.t }));
+    }
     revealedLetters = Array.isArray(state.revealedLetters)
         ? state.revealedLetters.map(r => Array.isArray(r) ? [...r] : Array(wordLen).fill(''))
         : Array(wordLen).fill(null).map(() => Array(wordLen).fill(''));
@@ -487,11 +510,12 @@ function restoreDailyState(state) {
     document.getElementById('green-hint-count').textContent = String(greenHintCount);
     document.getElementById('yellow-hint-count').textContent = String(yellowHintCount);
 
-    // Rebuild the daily history list (newest on top — matches live behavior).
+    // Rebuild the daily history list (newest on top — matches live behavior),
+    // pulling each guess's timestamp from guessLog.
     const historyList = document.getElementById('daily-guess-history');
     if (historyList) {
         historyList.innerHTML = '';
-        for (const g of guesses) addGuessToDailyHistoryList(g);
+        guessLog.forEach(g => addGuessToDailyHistoryList(g.word, g.t));
     }
 
     if (state.finished) {
@@ -511,11 +535,28 @@ function renderTimerFromElapsed(elapsed) {
     if (t) t.textContent = `${m}:${s}`;
 }
 
-function addGuessToDailyHistoryList(guess) {
+function formatElapsedMMSS(seconds) {
+    const s = Math.max(0, Math.round(Number(seconds) || 0));
+    const m = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${m}:${ss}`;
+}
+
+/** Prepend a guess (newest-on-top) to the live "Your Guesses" list, with its
+ *  elapsed timestamp. Used during play and when rebuilding from a restored game. */
+function addGuessToDailyHistoryList(guess, t) {
     const historyList = document.getElementById('daily-guess-history');
     if (!historyList) return;
     const li = document.createElement('li');
-    li.textContent = guess;
+    li.className = 'daily-guess-item';
+    const ts = document.createElement('span');
+    ts.className = 'guess-ts';
+    ts.textContent = formatElapsedMMSS(t);
+    const word = document.createElement('span');
+    word.className = 'guess-word';
+    word.textContent = guess;
+    li.appendChild(ts);
+    li.appendChild(word);
     const tooltip = document.createElement('div');
     tooltip.className = 'guess-tooltip';
     tooltip.innerHTML = '<em>Loading...</em>';
@@ -559,6 +600,10 @@ function initDailyVariant(variant) {
 
     renderBoard();
     fetchLeaderboard();
+    // Set the sidebar to the right view: a restored finished game lands in the
+    // completed default view (board + Top Ten); an in-progress game shows only
+    // "Your Guesses" with the leaderboard hidden until the puzzle is solved.
+    updateDailySidebarView();
 
     setTimeout(() => {
         const input = document.getElementById('guess-input');
@@ -681,6 +726,9 @@ function setupEventListeners() {
     on('past7-variant-common', 'click', () => switchPast7Variant('common'));
     on('past7-variant-wgpo', 'click', () => switchPast7Variant('wgpo'));
 
+    // Daily post-game review toggle (completed board + Top Ten  <->  move-by-move review)
+    on('daily-view-toggle-btn', 'click', toggleDailyView);
+
     // Past 7 replay controls
     on('past7-back-btn', 'click', backToPast7Grid);
     on('past7-replay-prev', 'click', replayStepBackward);
@@ -695,6 +743,16 @@ function setupEventListeners() {
         if (!replayVisible) return;
         if (e.key === 'ArrowUp') { e.preventDefault(); replayStepBackward(); }
         else if (e.key === 'ArrowDown') { e.preventDefault(); replayStepForward(); }
+    });
+
+    // Keyboard shortcuts for the daily post-game review: ↑ steps to an earlier
+    // move (up the chronological list), ↓ to a later move. Matches Past 7's
+    // ↓ = next / ↑ = previous convention.
+    document.addEventListener('keydown', (e) => {
+        const isDaily = gameMode === 'daily' || gameMode === 'daily_wgpo';
+        if (!isDaily || !gameOver || !dailyReviewMode) return;
+        if (e.key === 'ArrowUp') { e.preventDefault(); jumpDailyReviewTo(dailyReviewStep - 1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); jumpDailyReviewTo(dailyReviewStep + 1); }
     });
 
     // Splash / Rules
@@ -900,6 +958,10 @@ function useGreenHint() {
     greenHintCount++;
     document.getElementById('green-hint-count').textContent = greenHintCount;
 
+    if (gameMode === 'daily' || gameMode === 'daily_wgpo') {
+        dailyEvents.push({ type: 'green', col: pick.j, letter, t: getElapsedSeconds() });
+    }
+
     recomputeYellowLetters();
     computeColumnRedLetters();
     updateKeyboardColors();
@@ -960,6 +1022,10 @@ function useYellowHint() {
 
     yellowHintCount++;
     document.getElementById('yellow-hint-count').textContent = yellowHintCount;
+
+    if (gameMode === 'daily' || gameMode === 'daily_wgpo') {
+        dailyEvents.push({ type: 'yellow', letter, t: getElapsedSeconds() });
+    }
 
     computeColumnRedLetters();
     updateKeyboardColors();
@@ -1117,7 +1183,8 @@ function handleGuess() {
 
     const isDailyMode = gameMode === 'daily' || gameMode === 'daily_wgpo';
     if (isDailyMode) {
-        addGuessToDailyHistoryList(guess);
+        dailyEvents.push({ type: 'guess', word: guess, t: elapsedAtGuess });
+        addGuessToDailyHistoryList(guess, elapsedAtGuess);
     } else {
         const historyList = document.getElementById('guess-history');
         const li = document.createElement('li');
@@ -1346,6 +1413,11 @@ function checkWinCondition() {
         launchFireworks();
 
         const isDailyMode = gameMode === 'daily' || gameMode === 'daily_wgpo';
+        if (isDailyMode) {
+            // Reveal the completed-board + Top Ten view and the "Review your game" toggle.
+            dailyReviewMode = false;
+            updateDailySidebarView();
+        }
         if (isDailyMode && !dailySubmitted) {
             showNicknameModal();
         } else {
@@ -1613,6 +1685,346 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// --- Daily Post-Game Review ---
+//
+// After a daily puzzle is complete the sidebar offers two views:
+//   1. Default: completed board (main area) + "Today's Top Ten" leaderboard.
+//   2. Review:  step through the player's own game move-by-move, drawn into the
+//               main #game-board with diff highlights + ghost letters, exactly
+//               like the Past 7 viewer but for the player's own solve.
+//
+// The review reconstructs board state from `dailyEvents` (guesses AND hints, in
+// order) so hint-revealed cells appear at the right step. It never mutates the
+// live globals — exiting review simply re-renders the final board from them.
+
+/** Build a fresh 7×7 review board accumulator. */
+function newDailyReviewBoard() {
+    return {
+        revealed: Array(wordLen).fill(null).map(() => Array(wordLen).fill('')),
+        wrongPos: Array(wordLen).fill(''),
+        columnReds: Array(wordLen).fill(''),
+        guessesApplied: [],
+    };
+}
+
+/** Re-prune a board's yellow letters (row-local then global), mirroring recomputeYellowLetters. */
+function dailyReviewRecomputeYellows(board) {
+    for (let i = 0; i < wordLen; i++) {
+        const sw = secretWords[i];
+        let filtered = '';
+        for (const ch of board.wrongPos[i]) {
+            const inSecret = sw.split('').filter(c => c === ch).length;
+            const revealed = board.revealed[i].filter(c => c === ch).length;
+            if (revealed < inSecret) filtered += ch;
+        }
+        board.wrongPos[i] = filtered;
+    }
+    for (let i = 0; i < wordLen; i++) {
+        let filtered = '';
+        for (const ch of board.wrongPos[i]) {
+            let globally = true;
+            for (let w = 0; w < wordLen; w++) {
+                const inSecret = secretWords[w].split('').filter(c => c === ch).length;
+                const revealed = board.revealed[w].filter(c => c === ch).length;
+                if (revealed < inSecret) { globally = false; break; }
+            }
+            if (!globally) filtered += ch;
+        }
+        board.wrongPos[i] = filtered;
+    }
+}
+
+/** Recompute column reds, mirroring computeColumnRedLetters but on a review board. */
+function dailyReviewRecomputeReds(board) {
+    board.columnReds = Array(wordLen).fill('');
+    for (let j = 0; j < wordLen; j++) {
+        let allRevealed = true;
+        for (let i = 0; i < wordLen; i++) {
+            if (!board.revealed[i][j]) { allRevealed = false; break; }
+        }
+        if (allRevealed) continue;
+
+        const guessedInCol = new Set();
+        for (const g of board.guessesApplied) guessedInCol.add(g[j]);
+
+        for (const letter of guessedInCol) {
+            let isYellowSomewhere = false;
+            for (let i = 0; i < wordLen; i++) {
+                if (board.wrongPos[i].includes(letter)) { isYellowSomewhere = true; break; }
+            }
+            if (!isYellowSomewhere) continue;
+
+            let isCorrectInCol = false;
+            for (let i = 0; i < wordLen; i++) {
+                if (secretWords[i][j] === letter) { isCorrectInCol = true; break; }
+            }
+            if (!isCorrectInCol && !board.columnReds[j].includes(letter)) {
+                board.columnReds[j] += letter;
+            }
+        }
+        board.columnReds[j] = board.columnReds[j].split('').sort().join('');
+    }
+}
+
+/** Apply one timeline event to the review board, mirroring the live handlers. */
+function applyDailyReviewEvent(board, ev) {
+    if (ev.type === 'guess') {
+        const guess = ev.word;
+        board.guessesApplied.push(guess);
+        for (let i = 0; i < wordLen; i++) {
+            const sw = secretWords[i];
+            for (let j = 0; j < wordLen; j++) {
+                if (guess[j] === sw[j]) board.revealed[i][j] = guess[j];
+            }
+        }
+        for (let i = 0; i < wordLen; i++) {
+            const sw = secretWords[i];
+            const uniq = [...new Set(guess.split(''))];
+            for (const ch of uniq) {
+                if (sw.includes(ch) && !board.wrongPos[i].includes(ch)) board.wrongPos[i] += ch;
+            }
+            board.wrongPos[i] = board.wrongPos[i].split('').sort().join('');
+        }
+        dailyReviewRecomputeYellows(board);
+        dailyReviewRecomputeReds(board);
+    } else if (ev.type === 'green') {
+        for (let i = 0; i < wordLen; i++) {
+            if (secretWords[i][ev.col] === ev.letter) board.revealed[i][ev.col] = ev.letter;
+        }
+        dailyReviewRecomputeYellows(board);
+        dailyReviewRecomputeReds(board);
+    } else if (ev.type === 'yellow') {
+        for (let i = 0; i < wordLen; i++) {
+            if (secretWords[i].includes(ev.letter) && !board.wrongPos[i].includes(ev.letter)) {
+                board.wrongPos[i] += ev.letter;
+                board.wrongPos[i] = board.wrongPos[i].split('').sort().join('');
+            }
+        }
+        dailyReviewRecomputeReds(board);
+    }
+}
+
+function dailyReviewSnapshot(board) {
+    return {
+        revealed: board.revealed.map(r => r.slice()),
+        wrongPos: [...board.wrongPos],
+        columnReds: [...board.columnReds],
+    };
+}
+
+function dailyReviewDiff(before, after) {
+    const newGreens = new Set();
+    const newYellows = new Set();
+    const newReds = new Set();
+    for (let r = 0; r < wordLen; r++) for (let c = 0; c < wordLen; c++) {
+        if (!before.revealed[r][c] && after.revealed[r][c]) newGreens.add(`${r},${c}`);
+    }
+    for (let r = 0; r < wordLen; r++) {
+        const prev = new Set(before.wrongPos[r].split(''));
+        for (const ch of after.wrongPos[r]) if (!prev.has(ch)) newYellows.add(`${r},${ch}`);
+    }
+    for (let c = 0; c < wordLen; c++) {
+        const prev = new Set(before.columnReds[c].split(''));
+        for (const ch of after.columnReds[c]) if (!prev.has(ch)) newReds.add(`${c},${ch}`);
+    }
+    return { newGreens, newYellows, newReds };
+}
+
+/** Reconstruct board state after the first `step` events. Returns
+ *  { board, diff, ghostWord } where diff/ghostWord describe the last applied event. */
+function buildDailyReviewState(step) {
+    const board = newDailyReviewBoard();
+    let diff = null;
+    let ghostWord = null;
+    for (let k = 0; k < step; k++) {
+        const ev = dailyEvents[k];
+        if (!ev) continue;
+        const isLast = (k === step - 1);
+        const before = isLast ? dailyReviewSnapshot(board) : null;
+        applyDailyReviewEvent(board, ev);
+        if (isLast) {
+            const after = dailyReviewSnapshot(board);
+            diff = dailyReviewDiff(before, after);
+            ghostWord = ev.type === 'guess' ? ev.word : null;
+        }
+    }
+    return { board, diff, ghostWord };
+}
+
+/** Render the review board for the current dailyReviewStep into #game-board. */
+function renderDailyReviewBoard() {
+    const { board, diff, ghostWord } = buildDailyReviewState(dailyReviewStep);
+    const boardEl = document.getElementById('game-board');
+    if (!boardEl) return;
+    boardEl.dataset.wordLen = String(wordLen);
+    boardEl.innerHTML = '';
+
+    const guessChars = ghostWord ? ghostWord.split('') : null;
+
+    for (let i = 0; i < wordLen; i++) {
+        const row = document.createElement('div');
+        row.className = 'word-row';
+        let isCompleted = true;
+
+        for (let j = 0; j < wordLen; j++) {
+            const box = document.createElement('div');
+            box.className = 'letter-box';
+            if (board.revealed[i][j]) {
+                box.textContent = board.revealed[i][j];
+                box.classList.add('correct');
+                if (diff && diff.newGreens.has(`${i},${j}`)) box.classList.add('diff-new');
+            } else {
+                isCompleted = false;
+                if (guessChars && guessChars[j]) {
+                    box.textContent = guessChars[j];
+                    box.classList.add('replay-ghost');
+                }
+            }
+            row.appendChild(box);
+        }
+
+        if (isCompleted) {
+            row.classList.add('completed');
+            const tooltip = document.createElement('div');
+            tooltip.className = 'def-tooltip';
+            tooltip.innerHTML = '<em>Loading definition...</em>';
+            row.appendChild(tooltip);
+            fetchDefinition(secretWords[i], tooltip);
+        }
+
+        const feedback = document.createElement('div');
+        feedback.className = 'wrong-position-feedback';
+        feedback.innerHTML = board.wrongPos[i].split('').map(c => {
+            const isNew = diff && diff.newYellows.has(`${i},${c}`);
+            return `<span class="${isNew ? 'diff-new' : ''}">${c}</span>`;
+        }).join('');
+        row.appendChild(feedback);
+
+        boardEl.appendChild(row);
+    }
+
+    for (let j = 0; j < wordLen; j++) {
+        const colFeedback = document.getElementById(`col-${j}`);
+        if (!colFeedback) continue;
+        colFeedback.innerHTML = board.columnReds[j].split('').map(c => {
+            const isNew = diff && diff.newReds.has(`${j},${c}`);
+            return `<span class="${isNew ? 'diff-new' : ''}">${c}</span>`;
+        }).join('');
+    }
+}
+
+/** Rebuild the sidebar list as the full move timeline (oldest first), for review mode. */
+function renderDailyReviewList() {
+    const logEl = document.getElementById('daily-guess-history');
+    if (!logEl) return;
+    logEl.innerHTML = '';
+
+    dailyEvents.forEach((ev, k) => {
+        const step = k + 1;
+        const li = document.createElement('li');
+        li.className = 'daily-guess-item reviewable';
+        li.dataset.step = String(step);
+        if (step === dailyReviewStep) li.classList.add('current-step');
+
+        const ts = document.createElement('span');
+        ts.className = 'guess-ts';
+        ts.textContent = formatElapsedMMSS(ev.t);
+        li.appendChild(ts);
+
+        const label = document.createElement('span');
+        if (ev.type === 'guess') {
+            label.className = 'guess-word';
+            label.textContent = ev.word;
+        } else if (ev.type === 'green') {
+            li.classList.add('hint-entry');
+            label.className = 'guess-hint-label';
+            label.textContent = `Green hint · ${ev.letter.toUpperCase()}`;
+        } else if (ev.type === 'yellow') {
+            li.classList.add('hint-entry');
+            label.className = 'guess-hint-label';
+            label.textContent = `Yellow hint · ${ev.letter.toUpperCase()}`;
+        }
+        li.appendChild(label);
+
+        li.addEventListener('click', () => jumpDailyReviewTo(step));
+        logEl.appendChild(li);
+    });
+}
+
+/** Jump the review to the state after `step` events (clamped), re-render board + list. */
+function jumpDailyReviewTo(step) {
+    dailyReviewStep = Math.max(0, Math.min(step, dailyEvents.length));
+    renderDailyReviewBoard();
+    // Update current-step highlight without rebuilding the whole list.
+    const logEl = document.getElementById('daily-guess-history');
+    if (logEl) {
+        logEl.querySelectorAll('.daily-guess-item').forEach(li => {
+            const isCurrent = Number(li.dataset.step) === dailyReviewStep;
+            li.classList.toggle('current-step', isCurrent);
+            if (isCurrent) li.scrollIntoView({ block: 'nearest' });
+        });
+    }
+}
+
+/** Toggle between the completed-board+leaderboard view and the move-by-move review. */
+function toggleDailyView() {
+    if (!gameOver) return;
+    dailyReviewMode = !dailyReviewMode;
+
+    if (dailyReviewMode) {
+        // Enter review at the first move so it visibly differs from the completed board.
+        renderDailyReviewList();
+        jumpDailyReviewTo(dailyEvents.length > 0 ? 1 : 0); // renders board + syncs highlight
+    } else {
+        // Exit review: restore the final board from the (untouched) live globals.
+        renderBoard();
+    }
+    updateDailySidebarView();
+}
+
+/**
+ * Single source of truth for the daily sidebar layout. Three states:
+ *   - playing (not gameOver): hide leaderboard + toggle button, show Your Guesses.
+ *   - complete, default view: show toggle ("Review your game") + leaderboard, hide guesses.
+ *   - complete, review view:  show toggle ("Today's Top Ten") + guesses (interactive), hide leaderboard.
+ * No-op outside daily modes.
+ */
+function updateDailySidebarView() {
+    const isDaily = gameMode === 'daily' || gameMode === 'daily_wgpo';
+    if (!isDaily) return;
+
+    const toggleBtn = document.getElementById('daily-view-toggle-btn');
+    const scoreboardBlock = document.getElementById('scoreboard-block');
+    const historySection = document.getElementById('daily-history-section');
+    const reviewHint = document.getElementById('daily-review-hint');
+    const historyTitle = document.getElementById('daily-history-title');
+
+    const setShown = (el, shown) => { if (el) el.classList.toggle('hidden', !shown); };
+
+    if (!gameOver) {
+        setShown(toggleBtn, false);
+        setShown(scoreboardBlock, false);
+        setShown(historySection, true);
+        setShown(reviewHint, false);
+        if (historyTitle) historyTitle.textContent = 'Your Guesses';
+        return;
+    }
+
+    setShown(toggleBtn, true);
+    if (dailyReviewMode) {
+        if (toggleBtn) toggleBtn.textContent = 'Today\u2019s Top Ten';
+        setShown(scoreboardBlock, false);
+        setShown(historySection, true);
+        setShown(reviewHint, true);
+        if (historyTitle) historyTitle.textContent = 'Your Game';
+    } else {
+        if (toggleBtn) toggleBtn.textContent = 'Review your game';
+        setShown(scoreboardBlock, true);
+        setShown(historySection, false);
+        setShown(reviewHint, false);
+    }
 }
 
 // --- Past 7 Mode ---

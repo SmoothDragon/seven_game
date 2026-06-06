@@ -803,19 +803,95 @@ button.hint-btn:disabled {
 }
 
 .daily-history-section li {
-    padding: 4px 5px;
+    padding: 4px 6px;
     border-bottom: 1px solid #eee;
-    text-transform: uppercase;
-    text-align: center;
-    font-weight: bold;
-    letter-spacing: 2px;
     font-size: 0.85em;
-    cursor: pointer;
     position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
 }
 
 .daily-history-section li:hover {
     background-color: #f0f0f0;
+}
+
+/* Timestamp prefix on each guess / move (mm:ss). */
+.daily-history-section li .guess-ts {
+    font-variant-numeric: tabular-nums;
+    color: #999;
+    font-size: 0.85em;
+    min-width: 38px;
+    text-align: right;
+    flex: 0 0 auto;
+    letter-spacing: 0;
+    font-weight: normal;
+}
+
+.daily-history-section li .guess-word {
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+.daily-history-section li .guess-hint-label {
+    color: #6aaa64;
+    font-style: italic;
+    font-size: 0.95em;
+}
+
+/* Hint rows in review get a faint tinted background so they read as non-guesses. */
+.daily-history-section li.hint-entry {
+    background-color: #f3f9f1;
+}
+
+/* Only review-mode items are clickable. */
+.daily-history-section li.reviewable {
+    cursor: pointer;
+}
+
+.daily-history-section li.current-step {
+    background-color: #cfe2ff;
+    box-shadow: inset 3px 0 0 #007bff;
+}
+
+.daily-history-section li.current-step.hint-entry {
+    background-color: #cfe2ff;
+}
+
+/* "Review your game" / "Today's Top Ten" toggle button above the leaderboard. */
+.daily-view-toggle-btn {
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    font-size: 0.95em;
+    font-weight: bold;
+    color: white;
+    background-color: #007bff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.daily-view-toggle-btn:hover {
+    background-color: #0056b3;
+}
+
+.daily-review-hint {
+    font-size: 0.78em;
+    color: #888;
+    margin: 0 0 8px 0;
+    text-align: center;
+    line-height: 1.3;
+}
+
+/* This project has no global `.hidden` rule (see admin section note), so the
+ * daily-review sidebar elements need their own display:none toggles. */
+.daily-view-toggle-btn.hidden,
+#scoreboard-block.hidden,
+#daily-history-section.hidden,
+.daily-review-hint.hidden {
+    display: none;
 }
 
 .daily-history-section li .guess-tooltip {
