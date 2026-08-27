@@ -13,7 +13,7 @@
 //     all dates — the corpus the user wants for evaluating new candidate words.
 //
 // Bump this in lockstep with index.html / script.js / admin.html.
-const ASSET_VERSION = '12';
+const ASSET_VERSION = '13';
 
 // =====================================================================
 //   ADMIN_UID — REPLACE THE PLACEHOLDER BELOW

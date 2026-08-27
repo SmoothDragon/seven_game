@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '12';
+const ASSET_VERSION = '13';
 
 // Global state
 let secretWords = [];
@@ -1584,6 +1584,93 @@ async function submitScore(nickname) {
 
 // --- Leaderboard ---
 
+/** Sort a copy of the scores: primary = fewest hints, secondary = guesses/time
+ *  (per `secondaryKey`). Shared by the live scoreboard and the Past 7 panel. */
+function sortLeaderboardScores(scores, secondaryKey) {
+    const arr = [...scores];
+    arr.sort((a, b) => {
+        const hintsA = (a.green_hints || 0) + (a.yellow_hints || 0);
+        const hintsB = (b.green_hints || 0) + (b.yellow_hints || 0);
+        if (hintsA !== hintsB) return hintsA - hintsB;
+
+        if (secondaryKey === 'time') {
+            if ((a.time_seconds || 0) !== (b.time_seconds || 0)) return (a.time_seconds || 0) - (b.time_seconds || 0);
+            return (a.guesses || 0) - (b.guesses || 0);
+        }
+        if ((a.guesses || 0) !== (b.guesses || 0)) return (a.guesses || 0) - (b.guesses || 0);
+        return (a.time_seconds || 0) - (b.time_seconds || 0);
+    });
+    return arr;
+}
+
+/**
+ * Render a scoreboard table (identical columns/sort to the daily puzzle page)
+ * into `container`. Shared by the live daily scoreboard and the Past 7
+ * "yesterday" panel so the two never drift.
+ *
+ * opts:
+ *   secondaryKey   'guesses' | 'time' — current secondary sort
+ *   myNickname     string — highlight + "your rank" line
+ *   onSortChange   fn(key) — called when a Guesses/Time header is clicked
+ *   getRowReplay   fn(score) -> handler|null — if it returns a fn, that row is
+ *                  made clickable (a replayable solve); Past 7 only
+ */
+function renderScoreboardInto(container, scores, opts) {
+    if (!container) return;
+    const secondaryKey = opts.secondaryKey || 'guesses';
+    const myNickname = opts.myNickname || '';
+    const sorted = sortLeaderboardScores(scores, secondaryKey);
+
+    let myRank = -1;
+    for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i].nickname === myNickname) { myRank = i + 1; break; }
+    }
+
+    const guessArrow = secondaryKey === 'guesses' ? ' ▼' : '';
+    const timeArrow = secondaryKey === 'time' ? ' ▼' : '';
+    let html = '<table class="scoreboard-table">';
+    html += '<thead><tr><th>#</th><th>Name</th>' +
+        `<th><button class="sort-header-btn" data-sort="guesses">Guesses${guessArrow}</button></th>` +
+        `<th><button class="sort-header-btn" data-sort="time">Time${timeArrow}</button></th>` +
+        '<th>Hints</th></tr></thead><tbody>';
+
+    const top10 = sorted.slice(0, 10);
+    top10.forEach((score, idx) => {
+        const rank = idx + 1;
+        const isMe = score.nickname === myNickname;
+        const m = String(Math.floor((score.time_seconds || 0) / 60)).padStart(2, '0');
+        const s = String((score.time_seconds || 0) % 60).padStart(2, '0');
+        const replayable = opts.getRowReplay && opts.getRowReplay(score);
+        const cls = [isMe ? 'my-score' : '', replayable ? 'lb-replayable' : ''].filter(Boolean).join(' ');
+        html += `<tr class="${cls}">`;
+        html += `<td>${rank}</td>`;
+        html += `<td>${escapeHtml(score.nickname)}</td>`;
+        html += `<td>${score.guesses}</td>`;
+        html += `<td>${m}:${s}</td>`;
+        html += `<td>${(score.green_hints || 0) + (score.yellow_hints || 0)}</td>`;
+        html += `</tr>`;
+    });
+    html += '</tbody></table>';
+    if (myRank > 10) html += `<p class="my-rank">Your rank: #${myRank}</p>`;
+
+    container.innerHTML = html;
+
+    container.querySelectorAll('.sort-header-btn').forEach((btn) => {
+        btn.addEventListener('click', () => { if (opts.onSortChange) opts.onSortChange(btn.dataset.sort); });
+    });
+
+    if (opts.getRowReplay) {
+        const rows = container.querySelectorAll('tbody tr');
+        top10.forEach((score, idx) => {
+            const handler = opts.getRowReplay(score);
+            if (handler && rows[idx]) {
+                rows[idx].addEventListener('click', handler);
+                rows[idx].title = 'Replay this solve';
+            }
+        });
+    }
+}
+
 async function fetchLeaderboard() {
     const container = document.getElementById('scoreboard-list');
     if (!container) return;
@@ -1612,64 +1699,10 @@ async function fetchLeaderboard() {
         const scores = [];
         snapshot.forEach(doc => scores.push(doc.data()));
 
-        scores.sort((a, b) => {
-            const hintsA = (a.green_hints || 0) + (a.yellow_hints || 0);
-            const hintsB = (b.green_hints || 0) + (b.yellow_hints || 0);
-            if (hintsA !== hintsB) return hintsA - hintsB;
-
-            if (secondarySortKey === 'time') {
-                if (a.time_seconds !== b.time_seconds) return a.time_seconds - b.time_seconds;
-                return a.guesses - b.guesses;
-            }
-
-            if (a.guesses !== b.guesses) return a.guesses - b.guesses;
-            return a.time_seconds - b.time_seconds;
-        });
-
-        let myRank = -1;
-        for (let i = 0; i < scores.length; i++) {
-            if (scores[i].nickname === myNickname) {
-                myRank = i + 1;
-                break;
-            }
-        }
-
-        const guessArrow = secondarySortKey === 'guesses' ? ' ▼' : '';
-        const timeArrow = secondarySortKey === 'time' ? ' ▼' : '';
-        let html = '<table class="scoreboard-table">';
-        html += '<thead><tr><th>#</th><th>Name</th>' +
-            `<th><button class="sort-header-btn" data-sort="guesses">Guesses${guessArrow}</button></th>` +
-            `<th><button class="sort-header-btn" data-sort="time">Time${timeArrow}</button></th>` +
-            '<th>Hints</th></tr></thead>';
-        html += '<tbody>';
-
-        const top10 = scores.slice(0, 10);
-        top10.forEach((score, idx) => {
-            const rank = idx + 1;
-            const isMe = score.nickname === myNickname;
-            const m = String(Math.floor(score.time_seconds / 60)).padStart(2, '0');
-            const s = String(score.time_seconds % 60).padStart(2, '0');
-            html += `<tr class="${isMe ? 'my-score' : ''}">`;
-            html += `<td>${rank}</td>`;
-            html += `<td>${escapeHtml(score.nickname)}</td>`;
-            html += `<td>${score.guesses}</td>`;
-            html += `<td>${m}:${s}</td>`;
-            html += `<td>${(score.green_hints || 0) + (score.yellow_hints || 0)}</td>`;
-            html += `</tr>`;
-        });
-        
-        html += '</tbody></table>';
-
-        if (myRank > 10) {
-            html += `<p class="my-rank">Your rank: #${myRank}</p>`;
-        }
-        
-        container.innerHTML = html;
-        container.querySelectorAll('.sort-header-btn').forEach((btn) => {
-            btn.addEventListener('click', () => {
-                secondarySortKey = btn.dataset.sort;
-                fetchLeaderboard();
-            });
+        renderScoreboardInto(container, scores, {
+            secondaryKey: secondarySortKey,
+            myNickname,
+            onSortChange: (k) => { secondarySortKey = k; fetchLeaderboard(); },
         });
     } catch (e) {
         console.error("Error fetching leaderboard:", e);
@@ -2030,7 +2063,9 @@ function updateDailySidebarView() {
 // --- Past 7 Mode ---
 
 let past7Variant = 'common'; // 'common' | 'wgpo' — which daily flavor the Past 7 grid is showing
-let past7Days = []; // [{ date, letter, secrets, bestScore }]
+let past7Days = []; // [{ date, letter, secrets, bestScore, ... }]; index 0 = yesterday
+// Secondary sort for yesterday's full Top Ten panel (mirrors secondarySortKey on the live board).
+let past7LeaderboardSortKey = 'guesses';
 let replaySecrets = [];
 let replayCommon = '';
 let replayRevealed = null;
@@ -2125,11 +2160,41 @@ function initPast7() {
     renderPast7Grid();
 
     if (!db) {
-        past7Days.forEach(day => { day.loaded = true; });
+        past7Days.forEach(day => { day.loaded = true; day.leaderboardLoaded = true; });
         renderPast7Grid();
         return;
     }
-    past7Days.forEach((day) => fetchBestScoreForDay(day));
+    // Yesterday (index 0) shows the full Top Ten; the other six days show a
+    // best-solve card each.
+    if (past7Days[0]) fetchPast7Leaderboard(past7Days[0]);
+    for (let i = 1; i < past7Days.length; i++) fetchBestScoreForDay(past7Days[i]);
+}
+
+async function fetchPast7Leaderboard(day) {
+    // Fetch every score for `day` so we can render its full leaderboard, exactly
+    // like the live puzzle page. Variant-tagged: if the user flips the toggle
+    // mid-fetch, past7Days is rebuilt and this stale `day` is dropped, so the
+    // update below harmlessly writes to an orphaned object.
+    try {
+        const snap = await db.collection(dailyScoresCollection(day.variant))
+            .where('date', '==', day.date).get();
+        const scores = [];
+        snap.forEach(doc => scores.push(doc.data()));
+        day.leaderboardScores = scores;
+    } catch (e) {
+        console.error('Error fetching leaderboard for', day.date, e);
+        day.leaderboardError = (e && e.message) || 'unknown error';
+    } finally {
+        day.leaderboardLoaded = true;
+        renderPast7Grid();
+    }
+}
+
+/** A leaderboard row is replayable only if it's a clean (zero-hint) solve that
+ *  saved a guess log — the Past 7 replay engine reconstructs from guesses only. */
+function isCleanReplayableScore(score) {
+    const hints = (score.green_hints || 0) + (score.yellow_hints || 0);
+    return hints === 0 && Array.isArray(score.guess_log) && score.guess_log.length > 0;
 }
 
 async function fetchBestScoreForDay(day) {
@@ -2191,7 +2256,32 @@ function renderPast7Grid() {
     if (!grid) return;
     grid.innerHTML = '';
 
-    past7Days.forEach((day, idx) => {
+    // Left column (full height): yesterday's full Top Ten leaderboard.
+    const day0 = past7Days[0];
+    if (day0) {
+        const panel = document.createElement('div');
+        panel.className = 'past7-leaderboard';
+        const title = past7Variant === 'wgpo' ? "Yesterday\u2019s Tough Top Ten" : "Yesterday\u2019s Top Ten";
+        const header = document.createElement('div');
+        header.className = 'past7-leaderboard-header';
+        header.innerHTML =
+            `<div class="past7-card-date">${formatDateShort(day0.date)}</div>` +
+            `<div class="past7-card-letter">${day0.letter.toUpperCase()}</div>` +
+            `<h3 class="past7-leaderboard-title">${title}</h3>`;
+        panel.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'past7-leaderboard-list';
+        panel.appendChild(list);
+        grid.appendChild(panel);
+        renderPast7LeaderboardList(list, day0);
+    }
+
+    // Right side: the six older days (indices 1..6) as best-solve cards.
+    // With the leaderboard pinned to col 1 / rows 1-2, these auto-place into
+    // cols 2-4: days 2,3,4 on the top row, 5,6,7 on the bottom.
+    for (let idx = 1; idx < past7Days.length; idx++) {
+        const day = past7Days[idx];
         const card = document.createElement('div');
         card.className = 'past7-card';
         card.dataset.idx = String(idx);
@@ -2203,7 +2293,6 @@ function renderPast7Grid() {
         if (!day.loaded) {
             statusHtml = '<div class="past7-card-best muted">Loading…</div>';
         } else if (hasReplay) {
-            // Best score is the best-ranked zero-hint solve that has a replayable guess log.
             const m = String(Math.floor(best.time_seconds / 60)).padStart(2, '0');
             const s = String(best.time_seconds % 60).padStart(2, '0');
             statusHtml =
@@ -2225,20 +2314,48 @@ function renderPast7Grid() {
         `;
 
         if (hasReplay) {
-            card.addEventListener('click', () => openReplay(idx));
+            card.addEventListener('click', () => openReplay(day, day.bestScore));
         }
         grid.appendChild(card);
+    }
+}
+
+/** Populate yesterday's Top Ten list, reusing the shared scoreboard renderer.
+ *  Clean zero-hint solves with a guess log are made clickable to replay. */
+function renderPast7LeaderboardList(list, day) {
+    if (!db) {
+        list.innerHTML = '<p class="past7-lb-note">Firebase not configured — leaderboard unavailable.</p>';
+        return;
+    }
+    if (!day.leaderboardLoaded) {
+        list.innerHTML = '<p class="past7-lb-note">Loading…</p>';
+        return;
+    }
+    if (day.leaderboardError) {
+        list.innerHTML = `<p class="past7-lb-note">Could not load leaderboard (${escapeHtml(day.leaderboardError)}).</p>`;
+        return;
+    }
+    const scores = day.leaderboardScores || [];
+    if (scores.length === 0) {
+        list.innerHTML = '<p class="past7-lb-note">No scores for this day.</p>';
+        return;
+    }
+    const myNickname = localStorage.getItem('seven_sevens_nickname') || '';
+    renderScoreboardInto(list, scores, {
+        secondaryKey: past7LeaderboardSortKey,
+        myNickname,
+        onSortChange: (k) => { past7LeaderboardSortKey = k; renderPast7Grid(); },
+        getRowReplay: (score) => isCleanReplayableScore(score) ? () => openReplay(day, score) : null,
     });
 }
 
-function openReplay(dayIdx) {
-    const day = past7Days[dayIdx];
-    if (!day || !day.bestScore || !Array.isArray(day.bestScore.guess_log)) return;
+function openReplay(day, score) {
+    if (!day || !score || !Array.isArray(score.guess_log)) return;
 
-    currentReplayDayIdx = dayIdx;
+    currentReplayDayIdx = past7Days.indexOf(day);
     replaySecrets = [...day.secrets];
     replayCommon = day.letter;
-    replayLog = [...day.bestScore.guess_log]
+    replayLog = [...score.guess_log]
         .filter(g => g && typeof g.word === 'string')
         .map(g => ({ word: g.word.toLowerCase(), t: Number(g.t) || 0 }))
         .sort((a, b) => a.t - b.t);
@@ -2248,14 +2365,13 @@ function openReplay(dayIdx) {
     document.getElementById('past7-grid').classList.add('hidden');
     document.getElementById('past7-replay').classList.remove('hidden');
 
-    const best = day.bestScore;
-    const m = String(Math.floor(best.time_seconds / 60)).padStart(2, '0');
-    const s = String(best.time_seconds % 60).padStart(2, '0');
+    const m = String(Math.floor((score.time_seconds || 0) / 60)).padStart(2, '0');
+    const s = String((score.time_seconds || 0) % 60).padStart(2, '0');
     document.getElementById('past7-replay-header').innerHTML =
         `<h3>${formatDateLong(day.date)}</h3>` +
         `<p>Common letter: <strong class="past7-letter-inline">${day.letter.toUpperCase()}</strong> · ` +
-        `Best: <strong>${escapeHtml(best.nickname)}</strong> ` +
-        `(${best.guesses} guesses · ${m}:${s}, hint-free)</p>`;
+        `<strong>${escapeHtml(score.nickname)}</strong> ` +
+        `(${score.guesses} guesses · ${m}:${s}, hint-free)</p>`;
 
     renderReplayBoard();
     renderReplayLog();

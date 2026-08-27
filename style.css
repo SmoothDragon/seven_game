@@ -1124,15 +1124,73 @@ button.hint-btn:disabled {
     background-color: #e8f0fe;
 }
 
+/* Past 7 layout: yesterday's full Top Ten pinned to the left column (spanning
+ * both rows), and the six older days as best-solve cards filling cols 2-4 —
+ * days 2,3,4 on the top row, 5,6,7 on the bottom. */
 .past7-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: minmax(240px, 1.3fr) repeat(3, 1fr);
+    grid-template-rows: auto auto;
     gap: 12px;
     margin-bottom: 20px;
+    align-items: start;
 }
 
 .past7-grid.hidden {
     display: none;
+}
+
+.past7-leaderboard {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    background: #f8f9fa;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 12px 12px 14px;
+    display: flex;
+    flex-direction: column;
+}
+
+.past7-leaderboard-header {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.past7-leaderboard-title {
+    margin: 4px 0 10px;
+    font-size: 1em;
+}
+
+.past7-leaderboard-list {
+    overflow-x: auto;
+}
+
+.past7-lb-note {
+    text-align: center;
+    color: #888;
+    font-size: 0.9em;
+    margin: 8px 0;
+}
+
+/* Clean, replayable rows in yesterday's Top Ten are clickable. */
+.past7-leaderboard-list tr.lb-replayable {
+    cursor: pointer;
+}
+
+.past7-leaderboard-list tr.lb-replayable:hover {
+    background-color: #e8f0fe;
+}
+
+/* Narrow screens: leaderboard on top (full width), six cards in a 2-col grid. */
+@media (max-width: 760px) {
+    .past7-grid {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: none;
+    }
+    .past7-leaderboard {
+        grid-column: 1 / -1;
+        grid-row: auto;
+    }
 }
 
 .past7-card {
