@@ -13,7 +13,7 @@
 //     all dates — the corpus the user wants for evaluating new candidate words.
 //
 // Bump this in lockstep with index.html / script.js / admin.html.
-const ASSET_VERSION = '13';
+const ASSET_VERSION = '14';
 
 // =====================================================================
 //   ADMIN_UID — REPLACE THE PLACEHOLDER BELOW
@@ -119,7 +119,8 @@ function handleAuthChange(user) {
 // =====================================================================
 // Puzzle reconstruction — DUPLICATED from script.js to keep this page
 // independent of the live-game module. Must stay in sync if seedForDateStr,
-// pickPuzzle or the wgpo seed-salt ever change in script.js, or daily-mode
+// pickPuzzle, minSecretHammingForDate, or the wgpo seed-salt ever change in
+// script.js, or daily-mode
 // puzzle replay will silently mismatch.
 // =====================================================================
 
@@ -141,7 +142,30 @@ function seedForDateStr(dateStr) {
     return hash;
 }
 
-function pickPuzzle(rng, wordList, wordCount, excludeLetter) {
+function hammingDistance(a, b) {
+    let d = 0;
+    const n = a.length;
+    for (let i = 0; i < n; i++) {
+        if (a[i] !== b[i]) d++;
+    }
+    return d;
+}
+
+function differsFromAllBy(word, others, minPositions) {
+    for (let i = 0; i < others.length; i++) {
+        if (hammingDistance(word, others[i]) < minPositions) return false;
+    }
+    return true;
+}
+
+const PAIRWISE_HAMMING_FROM_DATE = '2026-09-20';
+
+function minSecretHammingForDate(dateStr) {
+    return dateStr >= PAIRWISE_HAMMING_FROM_DATE ? 2 : 0;
+}
+
+function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
+    if (minHamming == null) minHamming = 2;
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     const indices = Array.from({ length: 26 }, (_, i) => i);
     for (let i = indices.length - 1; i > 0; i--) {
@@ -168,21 +192,29 @@ function pickPuzzle(rng, wordList, wordCount, excludeLetter) {
 
     const secrets = [];
     const temp = [...candidates];
-    const n = Math.min(wordCount, temp.length);
-    for (let i = 0; i < n; i++) {
+    const skipped = [];
+    while (secrets.length < wordCount && temp.length > 0) {
         const ri = Math.floor(rng() * temp.length);
-        secrets.push(temp[ri]);
-        temp.splice(ri, 1);
+        const word = temp.splice(ri, 1)[0];
+        if (minHamming > 1 && !differsFromAllBy(word, secrets, minHamming)) {
+            skipped.push(word);
+            continue;
+        }
+        secrets.push(word);
+    }
+    while (secrets.length < wordCount && skipped.length > 0) {
+        secrets.push(skipped.shift());
     }
     return { letter, secrets };
 }
 
 function puzzleForDateVariant(dateStr, variant) {
+    const minHamming = minSecretHammingForDate(dateStr);
     if (variant === 'wgpo') {
-        const classic = pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null);
-        return pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter);
+        const classic = pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null, minHamming);
+        return pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter, minHamming);
     }
-    return pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null);
+    return pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null, minHamming);
 }
 
 function liveGuessesCollection(variant) {

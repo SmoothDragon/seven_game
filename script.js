@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '13';
+const ASSET_VERSION = '14';
 
 // Global state
 let secretWords = [];
@@ -329,12 +329,45 @@ function resetGameState() {
     clearFireworksOverlay();
 }
 
+/** Positions at which two equal-length words differ (Hamming distance). */
+function hammingDistance(a, b) {
+    let d = 0;
+    const n = a.length;
+    for (let i = 0; i < n; i++) {
+        if (a[i] !== b[i]) d++;
+    }
+    return d;
+}
+
+/** True iff `word` differs from every string in `others` in at least `minPositions` places. */
+function differsFromAllBy(word, others, minPositions) {
+    for (let i = 0; i < others.length; i++) {
+        if (hammingDistance(word, others[i]) < minPositions) return false;
+    }
+    return true;
+}
+
+/**
+ * Daily puzzles before this YYYY-MM-DD keep the original unconstrained picker so Past 7
+ * and admin replay still reconstruct the exact secrets that were published that day.
+ * From this date on, secret words must pairwise differ in at least two positions.
+ */
+const PAIRWISE_HAMMING_FROM_DATE = '2026-09-20';
+
+function minSecretHammingForDate(dateStr) {
+    return dateStr >= PAIRWISE_HAMMING_FROM_DATE ? 2 : 0;
+}
+
 /**
  * Pure puzzle derivation. Returns { letter, secrets } for a given seeded RNG and word list,
  * without touching globals. `excludeLetter` optionally forces a specific letter to be skipped
  * (used so Daily Hard never picks the same common letter as classic Daily on the same date).
+ * `minHamming` (default 2) is the minimum number of positions each pair of secrets must
+ * differ in — so spelling variants like analyze/analyse cannot both appear. Pass 0 to
+ * restore the original unconstrained draw (used for historical daily dates).
  */
-function pickPuzzle(rng, wordList, wordCount, excludeLetter) {
+function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
+    if (minHamming == null) minHamming = 2;
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     const indices = Array.from({ length: 26 }, (_, i) => i);
     for (let i = indices.length - 1; i > 0; i--) {
@@ -362,11 +395,19 @@ function pickPuzzle(rng, wordList, wordCount, excludeLetter) {
 
     const secrets = [];
     const temp = [...candidates];
-    const n = Math.min(wordCount, temp.length);
-    for (let i = 0; i < n; i++) {
+    const skipped = [];
+    while (secrets.length < wordCount && temp.length > 0) {
         const ri = Math.floor(rng() * temp.length);
-        secrets.push(temp[ri]);
-        temp.splice(ri, 1);
+        const word = temp.splice(ri, 1)[0];
+        if (minHamming > 1 && !differsFromAllBy(word, secrets, minHamming)) {
+            skipped.push(word);
+            continue;
+        }
+        secrets.push(word);
+    }
+    // Pathological fallback: fill remaining slots from skipped words (still unique).
+    while (secrets.length < wordCount && skipped.length > 0) {
+        secrets.push(skipped.shift());
     }
     return { letter, secrets };
 }
@@ -653,32 +694,7 @@ async function initGame() {
         }
     }
 
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    let validLetterFound = false;
-    let candidateWords = [];
-    let shuffledAlphabet = alphabet.split('').sort(() => 0.5 - Math.random());
-    
-    for (let letter of shuffledAlphabet) {
-        candidateWords = currentWordList.filter(w => w.includes(letter));
-        if (candidateWords.length >= 50) {
-            commonLetter = letter;
-            validLetterFound = true;
-            break;
-        }
-    }
-
-    if (!validLetterFound) {
-        commonLetter = 'e';
-        candidateWords = currentWordList.filter(w => w.includes('e'));
-    }
-
-    secretWords = [];
-    let tempCandidates = [...candidateWords];
-    for (let i = 0; i < wordLen; i++) {
-        const randomIndex = Math.floor(Math.random() * tempCandidates.length);
-        secretWords.push(tempCandidates[randomIndex]);
-        tempCandidates.splice(randomIndex, 1);
-    }
+    pickWordsWithRng(() => Math.random(), currentWordList);
 
     document.getElementById('common-letter').textContent = commonLetter.toUpperCase();
     renderBoard();
@@ -2107,7 +2123,7 @@ function seedForDateStr(dateStr) {
  */
 function puzzleForDate(dateStr) {
     const rng = mulberry32(seedForDateStr(dateStr));
-    return pickPuzzle(rng, WORDS.slice(0, 5000), 7, null);
+    return pickPuzzle(rng, WORDS.slice(0, 5000), 7, null, minSecretHammingForDate(dateStr));
 }
 
 /**
@@ -2121,7 +2137,7 @@ function puzzleForDate(dateStr) {
 function puzzleWgpoForDate(dateStr) {
     const classic = puzzleForDate(dateStr);
     const rng = mulberry32(seedForDateStr(dateStr + ':wgpo'));
-    return pickPuzzle(rng, WORDS, 7, classic.letter);
+    return pickPuzzle(rng, WORDS, 7, classic.letter, minSecretHammingForDate(dateStr));
 }
 
 function puzzleForDateVariant(dateStr, variant) {

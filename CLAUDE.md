@@ -192,18 +192,20 @@ let currentReplayDayIdx = -1;
 
 ### 5.4 Word picking
 
-The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {letter, secrets}`:
+The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) → {letter, secrets}` (`minHamming` defaults to 2):
 
 1. Build an array of 26 indices 0–25 and Fisher–Yates shuffle it with `rng`.
 2. For each letter in that shuffled alphabet (skipping `excludeLetter` if given), filter `wordList` for words containing it. The first letter for which `candidateWords.length >= 50` becomes the puzzle's common letter; its filtered list becomes the candidate pool.
-3. Pick `wordCount` words from the pool without replacement by repeatedly `splice`-ing a random index using `rng`.
+3. Pick `wordCount` words from the pool without replacement by repeatedly `splice`-ing a random index using `rng`. When `minHamming > 1`, a drawn word is **skipped** (removed from the pool, not selected) unless it differs from every already-picked secret in at least `minHamming` positions (Hamming distance). This keeps spelling variants like `analyze` / `analyse` from both appearing. If the pool is exhausted short of `wordCount` (pathological), leftover skipped words fill the remaining slots so the puzzle still has `wordCount` unique secrets.
 4. Returns `{letter, secrets}`. Never mutates globals.
 
-`pickWordsWithRng(rng, wordList)` is a thin back-compat wrapper that calls `pickPuzzle` and writes the results into the `commonLetter` / `secretWords` globals. It's used by Practice mode only.
+Helpers: `hammingDistance(a, b)` counts positions that differ; `differsFromAllBy(word, others, minPositions)` is the pairwise check. `PAIRWISE_HAMMING_FROM_DATE = '2026-09-20'` and `minSecretHammingForDate(dateStr)` return `2` on/after that date and `0` before it, so historical daily puzzles reconstruct bit-identically (the unconstrained draw consumes the same RNG sequence).
+
+`pickWordsWithRng(rng, wordList)` is a thin back-compat wrapper that calls `pickPuzzle` (default `minHamming = 2`) and writes the results into the `commonLetter` / `secretWords` globals. It's used by Practice mode only.
 
 **Daily variants.** The two daily puzzles are derived by:
-- `puzzleForDate(dateStr)` → `pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0,5000), 7, null)` — the **classic Daily**. The seed algorithm is the unchanged `seedForDateStr(dateStr)` so that `Past 7 → Daily` can still reconstruct every historical `daily_scores` puzzle exactly.
-- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter)` — the **Daily Hard**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the Hard daily's common letter is **never** the same as classic Daily's on the same day. (Function and seed-salt names keep the `wgpo` token — they're internal identifiers from when the mode was called "Daily WGPO" and must stay stable so existing `daily_scores_wgpo` puzzles still reconstruct correctly.)
+- `puzzleForDate(dateStr)` → `pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0,5000), 7, null, minSecretHammingForDate(dateStr))` — the **classic Daily**. The seed algorithm is the unchanged `seedForDateStr(dateStr)` so that `Past 7 → Daily` can still reconstruct every historical `daily_scores` puzzle exactly. Dates before `2026-09-20` pass `minHamming = 0` for the same reason.
+- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter, minSecretHammingForDate(dateStr))` — the **Daily Hard**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the Hard daily's common letter is **never** the same as classic Daily's on the same day. (Function and seed-salt names keep the `wgpo` token — they're internal identifiers from when the mode was called "Daily WGPO" and must stay stable so existing `daily_scores_wgpo` puzzles still reconstruct correctly.)
 - `puzzleForDateVariant(dateStr, variant)` is the single dispatcher used by both the live game init and Past 7.
 
 **Daily init.** `initDailyGame()` and `initDailyWgpoGame()` are thin aliases for `initDailyVariant('common'|'wgpo')`, which:
@@ -215,7 +217,7 @@ The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter) → {
 5. Calls `updateScoreboardHeading(variant)` which rewrites the sidebar title between `"Today's Top Ten"` and `"Today's Tough Top Ten"`.
 6. Renders the board, calls `fetchLeaderboard()` (which picks the right collection via `currentDailyVariant`), and focuses the input.
 
-`initGame()` (practice) is async. It reads `#practice-word-length` and, if 8, awaits `ensureWords8LexiconLoaded()` while showing a loading message. Then it picks the active word list based on `#difficulty` (common = first 5k, probable = 5k lowest Scrabble rank, all = full list), and picks the common letter + secrets the same way but with `Math.random()` (not seeded). If no letter has ≥50 candidates it falls back to `e`.
+`initGame()` (practice) is async. It reads `#practice-word-length` and, if 8, awaits `ensureWords8LexiconLoaded()` while showing a loading message. Then it picks the active word list based on `#difficulty` (common = first 5k, probable = 5k lowest Scrabble rank, all = full list), and calls `pickWordsWithRng(() => Math.random(), currentWordList)` so practice uses the same picker (including the Hamming ≥ 2 pairwise constraint) as daily, just unseeded. If no letter has ≥50 candidates `pickPuzzle` falls back to `e` (or `a` if `e` was excluded).
 
 ### 5.5 Guess handling
 
@@ -382,7 +384,7 @@ Once a daily puzzle is complete the player can review their own solve move-by-mo
 
 **Date selection.** `past7Dates()` returns 7 local-date strings going back from yesterday (not today) to 7 days ago, most recent first, in `YYYY-MM-DD` form.
 
-**Deterministic puzzle re-creation.** `seedForDateStr(dateStr)` re-implements the same date → seed hash used by `getDailySeed()` but parameterized by an arbitrary date string. `puzzleForDate(dateStr)` is a **pure** reimplementation of the daily picker that returns `{letter, secrets}` without touching any globals: seed `mulberry32`, shuffle the alphabet, pick the first letter whose 5k-Common filter has ≥50 candidates, then pick 7 words without replacement. This works because daily puzzles are always deterministic from the date.
+**Deterministic puzzle re-creation.** `seedForDateStr(dateStr)` re-implements the same date → seed hash used by `getDailySeed()` but parameterized by an arbitrary date string. `puzzleForDate(dateStr)` is a **pure** reimplementation of the daily picker that returns `{letter, secrets}` without touching any globals: seed `mulberry32`, shuffle the alphabet, pick the first letter whose 5k-Common filter has ≥50 candidates, then pick 7 words without replacement under the date's `minHamming` rule. This works because daily puzzles are always deterministic from the date.
 
 **Initialization** (`initPast7()`): stops any prior replay, hides `#past7-replay`, shows `#past7-grid`, calls `updatePast7VariantButtons()`, builds `past7Days` by calling `puzzleForDateVariant(date, past7Variant)` for each date (tagging each day with `day.variant` and marking `loaded:false`), renders the grid with a "Loading…" state, and — if `db` is available — kicks off fetches in parallel. **Yesterday** (`past7Days[0]`) gets `fetchPast7Leaderboard(day)`, which loads **every** score for that date into `day.leaderboardScores` (so the full Top Ten can be rendered). The other six days each get `fetchBestScoreForDay(day)`, which queries the variant's collection filtered to `day.date`, applies the **zero-hint-only → fewest guesses → fastest time** ordering described in §6.4, and picks the best-ranked entry that has a non-empty `guess_log` (falling back to the top-ranked entry if none are replayable). Each completion flips `day.loaded`/`day.leaderboardLoaded` and re-renders the grid.
 
@@ -588,6 +590,7 @@ To recreate this project from scratch:
    - Every valid guess must be appended to both `guesses` and `guessLog` (with elapsed seconds at that moment), and `guess_log` must be included in the Firestore submission payload — otherwise Past 7 replays will appear empty.
    - `pickPuzzle`, `puzzleForDate`, and `puzzleWgpoForDate` must all be pure (no global writes) so Past 7 can derive any past day's letter/secrets for either variant without clobbering the current game. Classic Daily's seed must remain exactly `seedForDateStr(dateStr)` to preserve replay-compatibility with existing `daily_scores` documents.
    - `puzzleWgpoForDate` must pass the classic day's common letter as `excludeLetter` to `pickPuzzle`, guaranteeing the two daily variants never share a letter on the same date.
+   - Secret words in a puzzle must pairwise differ in at least two positions (`minHamming = 2`), except daily dates before `PAIRWISE_HAMMING_FROM_DATE` (`2026-09-20`), which pass `minHamming = 0` so already-published puzzles reconstruct unchanged. `admin.js` must duplicate `hammingDistance`, `differsFromAllBy`, `minSecretHammingForDate`, and the updated `pickPuzzle` verbatim.
 7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **four** Firestore collections: `daily_scores` and `daily_scores_wgpo` (the two daily leaderboards) plus `live_guesses` and `live_guesses_wgpo` (the two per-variant live guess logs). Apply the rules in `firestore.rules` (or copy the snippets from §6.2 + §11). The two `daily_scores*` collections allow public `read` and schema-validated `create`; the two `live_guesses*` collections allow public `create` (so anonymous players can be logged) but restrict `read` to a single admin UID.
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
 9. (Optional) Set up the admin page (§11): in the Firebase console, enable Authentication → Google sign-in. Open `admin.html`, sign in once, copy the displayed UID into the `ADMIN_UID` constant in `admin.js` and into the two `request.auth.uid == '...'` checks in your Firestore rules, then redeploy the rules.
@@ -638,7 +641,7 @@ Three controls along the top:
 
 ### 11.3 Puzzle reconstruction
 
-`admin.js` contains its own copies of `mulberry32`, `seedForDateStr`, `pickPuzzle`, and `puzzleForDateVariant`, **duplicated verbatim** from `script.js`. This is intentional — `admin.html` is a separate page that doesn't load `script.js` (which would try to attach event listeners to elements that don't exist on the admin page), and the project doesn't use modules. If those four functions or the wgpo seed-salt (`':wgpo'`) ever change in `script.js`, they must be updated in `admin.js` too, or daily-mode replays will silently mismatch.
+`admin.js` contains its own copies of `mulberry32`, `seedForDateStr`, `hammingDistance`, `differsFromAllBy`, `minSecretHammingForDate`, `pickPuzzle`, and `puzzleForDateVariant`, **duplicated verbatim** from `script.js`. This is intentional — `admin.html` is a separate page that doesn't load `script.js` (which would try to attach event listeners to elements that don't exist on the admin page), and the project doesn't use modules. If those functions, `PAIRWISE_HAMMING_FROM_DATE`, or the wgpo seed-salt (`':wgpo'`) ever change in `script.js`, they must be updated in `admin.js` too, or daily-mode replays will silently mismatch.
 
 ### 11.4 Loading & grouping live guesses
 
