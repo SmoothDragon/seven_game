@@ -23,8 +23,8 @@ This document is a complete specification of the **Seven 7s** web game. It is wr
 
 There are **four** top-level modes, exposed as buttons in `.mode-toggle`:
 
-- **Daily** — the classic daily puzzle. Same for everyone on a given date. Uses the *Common 5k* word list (`WORDS.slice(0, 5000)`). Seed is a hash of the local date string. Scores submit to the `daily_scores` Firestore collection. A scoreboard sidebar shows today's finishers.
-- **Daily Hard** — a **second, independent** daily puzzle that uses the **full** 7-letter WGPO list (`WORDS`), including rare words excluded from the Common 5k list. Has its own leaderboard in a separate Firestore collection `daily_scores_wgpo`. Uses a different seed (`date + ':wgpo'`) and **is guaranteed to have a different common letter from the classic Daily on the same date** — the picker explicitly excludes the classic daily's letter from its alphabet search. (Internal identifier is `'wgpo'` everywhere — variant id, collection name, seed salt, DOM element ids, function names — to stay backward-compatible with existing data from when the mode was called "Daily WGPO". Only the display label changed.)
+- **Daily** — the classic daily puzzle. Same for everyone on a given date. Uses the *Common 5k* word list (`WORDS.slice(0, 5000)`). Seed is a hash of the local date string. Scores submit to the `daily_scores` Firestore collection. A scoreboard sidebar shows today's finishers. From `2026-11-19` on, offensive words are removed from the secret-word pool (see §5.4); they can still be guessed.
+- **Daily Hard** — a **second, independent** daily puzzle that uses the **full** 7-letter WGPO list (`WORDS`), including rare words excluded from the Common 5k list. The same offensive-word exclusion applies to its secret pool from `2026-11-19` on. Has its own leaderboard in a separate Firestore collection `daily_scores_wgpo`. Uses a different seed (`date + ':wgpo'`) and **is guaranteed to have a different common letter from the classic Daily on the same date** — the picker explicitly excludes the classic daily's letter from its alphabet search. (Internal identifier is `'wgpo'` everywhere — variant id, collection name, seed salt, DOM element ids, function names — to stay backward-compatible with existing data from when the mode was called "Daily WGPO". Only the display label changed.)
 - **Practice** — infinite random puzzles. The player chooses word length (7 or 8) and a difficulty:
   - *Common* — 5k most frequent words by usage.
   - *Probable* — 5k "most probable" words by Scrabble-tile likelihood.
@@ -45,6 +45,7 @@ seven_game/
 ├── admin.js                # admin logic: Google sign-in, session list, full guess replay, CSV export
 ├── firestore.rules         # informational copy of recommended Firestore security rules (NOT auto-deployed)
 ├── words.js                # const WORDS = [...]   7-letter lexicon, ordered by usage freq
+├── offensive-secrets.js    # words never chosen as Daily / Daily Hard secrets; still valid guesses
 ├── words8.js               # const WORDS8 = [...]  8-letter lexicon, ordered by usage freq
 ├── scrabble_ranks.js       # const SCRABBLE_RANKS = [...]  parallel array of "probability" ranks
 ├── scrabble_ranks8.js      # const SCRABBLE_RANKS8 = [...] parallel array for WORDS8
@@ -102,6 +103,7 @@ One page, one `<body>`. Major elements, in order:
    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
    <script src="words.js?v=2"></script>
    <script src="scrabble_ranks.js?v=2"></script>
+   <script src="offensive-secrets.js?v=2"></script>
    <script src="firebase-config.js?v=2"></script>
    <script src="script.js?v=2"></script>
    ```
@@ -192,20 +194,22 @@ let currentReplayDayIdx = -1;
 
 ### 5.4 Word picking
 
-The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) → {letter, secrets}` (`minHamming` defaults to 2):
+The pure primitive is `pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming, excludeWords) → {letter, secrets}` (`minHamming` defaults to 2; `excludeWords` defaults to null):
 
 1. Build an array of 26 indices 0–25 and Fisher–Yates shuffle it with `rng`.
 2. For each letter in that shuffled alphabet (skipping `excludeLetter` if given), filter `wordList` for words containing it. The first letter for which `candidateWords.length >= 50` becomes the puzzle's common letter; its filtered list becomes the candidate pool.
-3. Pick `wordCount` words from the pool without replacement by repeatedly `splice`-ing a random index using `rng`. When `minHamming > 1`, a drawn word is **skipped** (removed from the pool, not selected) unless it differs from every already-picked secret in at least `minHamming` positions (Hamming distance). This keeps spelling variants like `analyze` / `analyse` from both appearing. If the pool is exhausted short of `wordCount` (pathological), leftover skipped words fill the remaining slots so the puzzle still has `wordCount` unique secrets.
+3. Pick `wordCount` words from the pool without replacement by repeatedly `splice`-ing a random index using `rng`. A drawn word in `excludeWords` is discarded and never selected (and is not eligible for the fallback below). When `minHamming > 1`, a drawn word is **skipped** (removed from the pool, not selected) unless it differs from every already-picked secret in at least `minHamming` positions (Hamming distance). This keeps spelling variants like `analyze` / `analyse` from both appearing. If the pool is exhausted short of `wordCount` (pathological), leftover skipped words fill the remaining slots so the puzzle still has `wordCount` unique secrets. Passing `excludeWords = null` adds no extra branch that changes the draw, so old puzzles stay bit-identical.
 4. Returns `{letter, secrets}`. Never mutates globals.
 
 Helpers: `hammingDistance(a, b)` counts positions that differ; `differsFromAllBy(word, others, minPositions)` is the pairwise check. `PAIRWISE_HAMMING_FROM_DATE = '2026-09-20'` and `minSecretHammingForDate(dateStr)` return `2` on/after that date and `0` before it, so historical daily puzzles reconstruct bit-identically (the unconstrained draw consumes the same RNG sequence).
 
-`pickWordsWithRng(rng, wordList)` is a thin back-compat wrapper that calls `pickPuzzle` (default `minHamming = 2`) and writes the results into the `commonLetter` / `secretWords` globals. It's used by Practice mode only.
+`pickWordsWithRng(rng, wordList)` is a thin back-compat wrapper that calls `pickPuzzle` (default `minHamming = 2`) and writes the results into the `commonLetter` / `secretWords` globals. It's used by Practice mode only. Practice does **not** apply the offensive-word filter below.
+
+**Offensive secrets.** `offensive-secrets.js` (loaded by both `index.html` and `admin.html`) defines `OFFENSIVE_SECRET_WORDS` and `offensiveSecretsForDate(dateStr)`. The set is exact-match slurs, strong profanity, and explicit sexual vocabulary. Those words stay in `WORDS`, so `handleGuess` still accepts them. On and after `OFFENSIVE_SECRETS_FROM_DATE` (`2026-11-19`), `puzzleForDate` / `puzzleWgpoForDate` pass that set as `excludeWords`, so a drawn secret is discarded instead of selected. The common-letter search is unchanged, and a day whose seven secrets would not have included a listed word keeps those exact secrets — only a draw that actually hits the set consumes an extra pick. Dates before the cutoff pass `null`, so already-published puzzles, including days already underway in timezones ahead of Pacific when the filter shipped, reconstruct bit-identically. Practice does not pass the set.
 
 **Daily variants.** The two daily puzzles are derived by:
-- `puzzleForDate(dateStr)` → `pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0,5000), 7, null, minSecretHammingForDate(dateStr))` — the **classic Daily**. The seed algorithm is the unchanged `seedForDateStr(dateStr)` so that `Past 7 → Daily` can still reconstruct every historical `daily_scores` puzzle exactly. Dates before `2026-09-20` pass `minHamming = 0` for the same reason.
-- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter, minSecretHammingForDate(dateStr))` — the **Daily Hard**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the Hard daily's common letter is **never** the same as classic Daily's on the same day. (Function and seed-salt names keep the `wgpo` token — they're internal identifiers from when the mode was called "Daily WGPO" and must stay stable so existing `daily_scores_wgpo` puzzles still reconstruct correctly.)
+- `puzzleForDate(dateStr)` → `pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0,5000), 7, null, minSecretHammingForDate(dateStr), offensiveSecretsForDate(dateStr))` — the **classic Daily**. The seed algorithm is the unchanged `seedForDateStr(dateStr)` so that `Past 7 → Daily` can still reconstruct every historical `daily_scores` puzzle exactly. Dates before `2026-09-20` pass `minHamming = 0` for the same reason. Dates before `2026-11-19` pass `excludeWords = null`.
+- `puzzleWgpoForDate(dateStr)` → first computes the classic daily's letter for the same date, then returns `pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter, minSecretHammingForDate(dateStr), offensiveSecretsForDate(dateStr))` — the **Daily Hard**. Using the `':wgpo'` suffix gives a completely different alphabet shuffle; passing `classic.letter` as `excludeLetter` guarantees the Hard daily's common letter is **never** the same as classic Daily's on the same day. (Function and seed-salt names keep the `wgpo` token — they're internal identifiers from when the mode was called "Daily WGPO" and must stay stable so existing `daily_scores_wgpo` puzzles still reconstruct correctly.) The same date cutoff applies to `excludeWords`.
 - `puzzleForDateVariant(dateStr, variant)` is the single dispatcher used by both the live game init and Past 7.
 
 **Daily init.** `initDailyGame()` and `initDailyWgpoGame()` are thin aliases for `initDailyVariant('common'|'wgpo')`, which:
@@ -591,6 +595,7 @@ To recreate this project from scratch:
    - `pickPuzzle`, `puzzleForDate`, and `puzzleWgpoForDate` must all be pure (no global writes) so Past 7 can derive any past day's letter/secrets for either variant without clobbering the current game. Classic Daily's seed must remain exactly `seedForDateStr(dateStr)` to preserve replay-compatibility with existing `daily_scores` documents.
    - `puzzleWgpoForDate` must pass the classic day's common letter as `excludeLetter` to `pickPuzzle`, guaranteeing the two daily variants never share a letter on the same date.
    - Secret words in a puzzle must pairwise differ in at least two positions (`minHamming = 2`), except daily dates before `PAIRWISE_HAMMING_FROM_DATE` (`2026-09-20`), which pass `minHamming = 0` so already-published puzzles reconstruct unchanged. `admin.js` must duplicate `hammingDistance`, `differsFromAllBy`, `minSecretHammingForDate`, and the updated `pickPuzzle` verbatim.
+   - From `OFFENSIVE_SECRETS_FROM_DATE` (`2026-11-19`), Daily and Daily Hard pass `offensiveSecretsForDate(dateStr)` as `pickPuzzle`'s `excludeWords` so listed words are never secrets. They stay in `WORDS` and remain valid guesses. Earlier dates pass `null`. Practice does not pass the set. `admin.js` must call the same helper, and its `pickPuzzle` copy must honor `excludeWords`.
 7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **four** Firestore collections: `daily_scores` and `daily_scores_wgpo` (the two daily leaderboards) plus `live_guesses` and `live_guesses_wgpo` (the two per-variant live guess logs). Apply the rules in `firestore.rules` (or copy the snippets from §6.2 + §11). The two `daily_scores*` collections allow public `read` and schema-validated `create`; the two `live_guesses*` collections allow public `create` (so anonymous players can be logged) but restrict `read` to a single admin UID.
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
 9. (Optional) Set up the admin page (§11): in the Firebase console, enable Authentication → Google sign-in. Open `admin.html`, sign in once, copy the displayed UID into the `ADMIN_UID` constant in `admin.js` and into the two `request.auth.uid == '...'` checks in your Firestore rules, then redeploy the rules.
@@ -641,7 +646,7 @@ Three controls along the top:
 
 ### 11.3 Puzzle reconstruction
 
-`admin.js` contains its own copies of `mulberry32`, `seedForDateStr`, `hammingDistance`, `differsFromAllBy`, `minSecretHammingForDate`, `pickPuzzle`, and `puzzleForDateVariant`, **duplicated verbatim** from `script.js`. This is intentional — `admin.html` is a separate page that doesn't load `script.js` (which would try to attach event listeners to elements that don't exist on the admin page), and the project doesn't use modules. If those functions, `PAIRWISE_HAMMING_FROM_DATE`, or the wgpo seed-salt (`':wgpo'`) ever change in `script.js`, they must be updated in `admin.js` too, or daily-mode replays will silently mismatch.
+`admin.js` contains its own copies of `mulberry32`, `seedForDateStr`, `hammingDistance`, `differsFromAllBy`, `minSecretHammingForDate`, `pickPuzzle`, and `puzzleForDateVariant`, **duplicated verbatim** from `script.js`. This is intentional — `admin.html` is a separate page that doesn't load `script.js` (which would try to attach event listeners to elements that don't exist on the admin page), and the project doesn't use modules. If those functions, `PAIRWISE_HAMMING_FROM_DATE`, or the wgpo seed-salt (`':wgpo'`) ever change in `script.js`, they must be updated in `admin.js` too, or daily-mode replays will silently mismatch. Both pages load `offensive-secrets.js` and pass `offensiveSecretsForDate(dateStr)` into `pickPuzzle`; that helper is not copied. The `excludeWords` parameter on `pickPuzzle` must match in both files.
 
 ### 11.4 Loading & grouping live guesses
 

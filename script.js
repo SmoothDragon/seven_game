@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '14';
+const ASSET_VERSION = '15';
 
 // Global state
 let secretWords = [];
@@ -365,8 +365,10 @@ function minSecretHammingForDate(dateStr) {
  * `minHamming` (default 2) is the minimum number of positions each pair of secrets must
  * differ in — so spelling variants like analyze/analyse cannot both appear. Pass 0 to
  * restore the original unconstrained draw (used for historical daily dates).
+ * `excludeWords` (a Set, or null) drops those words from secret selection without
+ * removing them from the guess lexicon. Null leaves the draw unchanged.
  */
-function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
+function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming, excludeWords) {
     if (minHamming == null) minHamming = 2;
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     const indices = Array.from({ length: 26 }, (_, i) => i);
@@ -399,6 +401,7 @@ function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
     while (secrets.length < wordCount && temp.length > 0) {
         const ri = Math.floor(rng() * temp.length);
         const word = temp.splice(ri, 1)[0];
+        if (excludeWords && excludeWords.has(word)) continue;
         if (minHamming > 1 && !differsFromAllBy(word, secrets, minHamming)) {
             skipped.push(word);
             continue;
@@ -406,6 +409,7 @@ function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
         secrets.push(word);
     }
     // Pathological fallback: fill remaining slots from skipped words (still unique).
+    // Excluded words were never added to `skipped`, so they cannot be filled in here.
     while (secrets.length < wordCount && skipped.length > 0) {
         secrets.push(skipped.shift());
     }
@@ -2123,7 +2127,10 @@ function seedForDateStr(dateStr) {
  */
 function puzzleForDate(dateStr) {
     const rng = mulberry32(seedForDateStr(dateStr));
-    return pickPuzzle(rng, WORDS.slice(0, 5000), 7, null, minSecretHammingForDate(dateStr));
+    return pickPuzzle(
+        rng, WORDS.slice(0, 5000), 7, null,
+        minSecretHammingForDate(dateStr), offensiveSecretsForDate(dateStr)
+    );
 }
 
 /**
@@ -2137,7 +2144,10 @@ function puzzleForDate(dateStr) {
 function puzzleWgpoForDate(dateStr) {
     const classic = puzzleForDate(dateStr);
     const rng = mulberry32(seedForDateStr(dateStr + ':wgpo'));
-    return pickPuzzle(rng, WORDS, 7, classic.letter, minSecretHammingForDate(dateStr));
+    return pickPuzzle(
+        rng, WORDS, 7, classic.letter,
+        minSecretHammingForDate(dateStr), offensiveSecretsForDate(dateStr)
+    );
 }
 
 function puzzleForDateVariant(dateStr, variant) {

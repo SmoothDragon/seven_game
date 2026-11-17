@@ -13,7 +13,7 @@
 //     all dates — the corpus the user wants for evaluating new candidate words.
 //
 // Bump this in lockstep with index.html / script.js / admin.html.
-const ASSET_VERSION = '14';
+const ASSET_VERSION = '15';
 
 // =====================================================================
 //   ADMIN_UID — REPLACE THE PLACEHOLDER BELOW
@@ -120,8 +120,9 @@ function handleAuthChange(user) {
 // Puzzle reconstruction — DUPLICATED from script.js to keep this page
 // independent of the live-game module. Must stay in sync if seedForDateStr,
 // pickPuzzle, minSecretHammingForDate, or the wgpo seed-salt ever change in
-// script.js, or daily-mode
-// puzzle replay will silently mismatch.
+// script.js, or daily-mode puzzle replay will silently mismatch.
+// Secret-word filtering lives in offensive-secrets.js (offensiveSecretsForDate),
+// which both pages load, so that list is not duplicated here.
 // =====================================================================
 
 function mulberry32(seed) {
@@ -164,7 +165,7 @@ function minSecretHammingForDate(dateStr) {
     return dateStr >= PAIRWISE_HAMMING_FROM_DATE ? 2 : 0;
 }
 
-function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
+function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming, excludeWords) {
     if (minHamming == null) minHamming = 2;
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     const indices = Array.from({ length: 26 }, (_, i) => i);
@@ -196,6 +197,7 @@ function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
     while (secrets.length < wordCount && temp.length > 0) {
         const ri = Math.floor(rng() * temp.length);
         const word = temp.splice(ri, 1)[0];
+        if (excludeWords && excludeWords.has(word)) continue;
         if (minHamming > 1 && !differsFromAllBy(word, secrets, minHamming)) {
             skipped.push(word);
             continue;
@@ -210,11 +212,12 @@ function pickPuzzle(rng, wordList, wordCount, excludeLetter, minHamming) {
 
 function puzzleForDateVariant(dateStr, variant) {
     const minHamming = minSecretHammingForDate(dateStr);
+    const excludeWords = offensiveSecretsForDate(dateStr);
     if (variant === 'wgpo') {
-        const classic = pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null, minHamming);
-        return pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter, minHamming);
+        const classic = pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null, minHamming, excludeWords);
+        return pickPuzzle(mulberry32(seedForDateStr(dateStr + ':wgpo')), WORDS, 7, classic.letter, minHamming, excludeWords);
     }
-    return pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null, minHamming);
+    return pickPuzzle(mulberry32(seedForDateStr(dateStr)), WORDS.slice(0, 5000), 7, null, minHamming, excludeWords);
 }
 
 function liveGuessesCollection(variant) {
