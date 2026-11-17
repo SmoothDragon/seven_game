@@ -547,14 +547,14 @@ Flipping the sub-toggle inside `#past7-section` is handled by `switchPast7Varian
 
 These are user-facing; reuse the wording verbatim for consistency:
 
-1. All guesses must include the common letter and be a valid WOW24 word (linked in-rule to `https://wordgameplayers.org/wgpo-official-words/`). The daily puzzle is always seven 7-letter words; in Practice you can play seven 7-letter or eight 8-letter words per game.
-2. Guessed letters in the correct position will turn **green**.
-3. Guessed letters in incorrect positions will show in **yellow** to the right of the word.
-4. **Red** letters below a column indicate that letter is not present in that column.
-5. The keyboard blackens out letters that are known to be unnecessary to finish.
-6. It is sometimes helpful to guess words to gather letter information.
-7. **Green Hint**: Reveals a random unknown letter in its correct position across all words.
-8. **Yellow Hint**: Reveals an unguessed letter in yellow for all the words that contain it, without showing its position.
+1. All guesses must include the common letter of the day.
+2. **Green** indicates correct position.
+3. **Yellow** indicates a guessed letter is in a non-guessed position.
+4. **Red** indicates letters not in a column.
+5. **Black** indicates unnecessary letters.
+6. **Blue** indicates unnecessary letters in unfinished words.
+7. **Green Hint**: Reveal a letter in the correct position.
+8. **Yellow Hint**: Reveal a letter used, but not the position.
 
 The splash also links to `https://wordgameplayers.org/wgpo-official-words/` as the source of words.
 
