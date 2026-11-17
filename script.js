@@ -1,6 +1,6 @@
 // Bump this (and the matching ?v= suffixes in index.html) on every release so
 // GitHub Pages / browser caches serve the fresh bundle instead of stale JS.
-const ASSET_VERSION = '15';
+const ASSET_VERSION = '16';
 
 // Global state
 let secretWords = [];
@@ -21,6 +21,9 @@ let greenHintCount = 0;
 let yellowHintCount = 0;
 let gameMode = 'daily'; // 'daily' | 'daily_wgpo' | 'practice' | 'past7'
 let currentDailyVariant = 'common'; // 'common' (classic Daily) | 'wgpo' (Daily Hard — id kept 'wgpo' for backward compatibility with existing daily_scores_wgpo documents)
+// Game day this daily session was loaded for. Saves and score submits stay on
+// this date even if 1:00 AM Pacific passes while the tab is open.
+let activeGameDate = null;
 let dailySubmitted = false;
 let finalElapsedSeconds = 0;
 let paused = false;
@@ -145,19 +148,11 @@ function mulberry32(seed) {
 }
 
 function getDailySeed() {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    let hash = 0;
-    for (let i = 0; i < dateStr.length; i++) {
-        hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
-        hash |= 0;
-    }
-    return hash;
+    return seedForDateStr(getTodayString());
 }
 
 function getTodayString() {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    return gameDayString(new Date());
 }
 
 let probableWordListCache = null;
@@ -458,7 +453,7 @@ function dailyStateKey(variant, dateStr) {
 function saveDailyState() {
     if (gameMode !== 'daily' && gameMode !== 'daily_wgpo') return;
     try {
-        const dateStr = getTodayString();
+        const dateStr = activeGameDate || getTodayString();
         const payload = {
             date: dateStr,
             variant: currentDailyVariant,
@@ -510,7 +505,7 @@ function discardDailyState(variant, dateStr) {
  * Returns true if state was applied, false if it was discarded as stale.
  */
 function restoreDailyState(state) {
-    const todayStr = getTodayString();
+    const todayStr = activeGameDate || getTodayString();
     // Guard against drift: if commonLetter or the secret-word set has changed
     // since saving (algorithm bump, etc.), discard the stale state and start fresh.
     if (state.commonLetter !== commonLetter || state.secretWordsHash !== secretWords.join(',')) {
@@ -624,6 +619,7 @@ function initDailyVariant(variant) {
     resetGameState();
 
     const todayStr = getTodayString();
+    activeGameDate = todayStr;
     dailySubmitted = localStorage.getItem(dailySubmittedKey(variant, todayStr)) === 'true';
 
     const puzzle = puzzleForDateVariant(todayStr, variant);
@@ -1144,7 +1140,7 @@ function logLiveGuess(word, valid, rejectReason, elapsedSeconds) {
     const variant = currentDailyVariant;
     const nickname = localStorage.getItem('seven_sevens_nickname') || null;
     const payload = {
-        date: getTodayString(),
+        date: activeGameDate || getTodayString(),
         variant: variant,
         session_id: getOrCreateSessionId(),
         nickname: nickname,
@@ -1567,7 +1563,7 @@ async function submitScore(nickname) {
     }
 
     const variant = currentDailyVariant;
-    const todayStr = getTodayString();
+    const todayStr = activeGameDate || getTodayString();
     const submittedKey = dailySubmittedKey(variant, todayStr);
 
     if (localStorage.getItem(submittedKey) === 'true') {
@@ -1703,7 +1699,7 @@ async function fetchLeaderboard() {
     container.innerHTML = '<p style="text-align:center; color:#888;">Loading...</p>';
 
     const variant = currentDailyVariant;
-    const todayStr = getTodayString();
+    const todayStr = activeGameDate || getTodayString();
     const myNickname = localStorage.getItem('seven_sevens_nickname') || '';
 
     try {
@@ -2083,6 +2079,7 @@ function updateDailySidebarView() {
 // --- Past 7 Mode ---
 
 let past7Variant = 'common'; // 'common' | 'wgpo' — which daily flavor the Past 7 grid is showing
+let past7AnchorDate = null; // game day the current Past 7 grid was built from
 let past7Days = []; // [{ date, letter, secrets, bestScore, ... }]; index 0 = yesterday
 // Secondary sort for yesterday's full Top Ten panel (mirrors secondarySortKey on the live board).
 let past7LeaderboardSortKey = 'guesses';
@@ -2100,14 +2097,9 @@ let replayDiff = null; // { newGreens: Set<"r,c">, newYellows: Set<"r,letter">, 
 let currentReplayDayIdx = -1;
 
 function past7Dates() {
+    const today = getTodayString();
     const arr = [];
-    const today = new Date();
-    for (let i = 1; i <= 7; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        arr.push(s);
-    }
+    for (let i = 1; i <= 7; i++) arr.push(shiftGameDay(today, -i));
     return arr;
 }
 
@@ -2169,6 +2161,7 @@ function switchPast7Variant(variant) {
 }
 
 function initPast7() {
+    past7AnchorDate = getTodayString();
     currentReplayDayIdx = -1;
     replayDiff = null;
 
@@ -2701,8 +2694,39 @@ function updateReplayControls() {
 
 // --- Startup ---
 
+// Daily, Daily Hard, and Past 7 follow the Pacific game day. If 1:00 AM
+// Pacific passes while the tab is open, save the daily in progress under the
+// day it started, then load the new day. Practice is left alone.
+function refreshIfGameDayRolled() {
+    if (gameMode === 'practice') return;
+    const modal = document.getElementById('nickname-modal');
+    if (modal && !modal.classList.contains('hidden')) return;
+
+    const today = getTodayString();
+    if (gameMode === 'past7') {
+        if (past7AnchorDate === today) return;
+        initPast7();
+        return;
+    }
+    if (gameMode !== 'daily' && gameMode !== 'daily_wgpo') return;
+    if (activeGameDate === today) return;
+    if (guesses.length || greenHintCount || yellowHintCount || gameOver || startTime) {
+        saveDailyState();
+    }
+    if (gameMode === 'daily') initDailyGame();
+    else initDailyWgpoGame();
+}
+
+function startGameDayWatch() {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refreshIfGameDayRolled();
+    });
+    setInterval(refreshIfGameDayRolled, 30000);
+}
+
 window.onload = () => {
     initFirebase();
     setupEventListeners();
     switchMode('daily');
+    startGameDayWatch();
 };

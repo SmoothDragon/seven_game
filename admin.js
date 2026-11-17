@@ -13,7 +13,7 @@
 //     all dates — the corpus the user wants for evaluating new candidate words.
 //
 // Bump this in lockstep with index.html / script.js / admin.html.
-const ASSET_VERSION = '15';
+const ASSET_VERSION = '16';
 
 // =====================================================================
 //   ADMIN_UID — REPLACE THE PLACEHOLDER BELOW
@@ -229,8 +229,7 @@ function liveGuessesCollection(variant) {
 // =====================================================================
 
 function todayString() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return gameDayString(new Date());
 }
 
 function formatDateLong(dateStr) {

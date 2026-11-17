@@ -21,7 +21,7 @@ This document is a complete specification of the **Seven 7s** web game. It is wr
 
 ### Modes
 
-There are **four** top-level modes, exposed as buttons in `.mode-toggle`:
+There are **four** top-level modes, exposed as buttons in `.mode-toggle`. Daily, Daily Hard, and Past 7 share one game day: the Pacific calendar date, rolling over at **1:00 AM Pacific Time** (`America/Los_Angeles`). Practice is not tied to that clock.
 
 - **Daily** — the classic daily puzzle. Same for everyone on a given date. Uses the *Common 5k* word list (`WORDS.slice(0, 5000)`). Seed is a hash of the local date string. Scores submit to the `daily_scores` Firestore collection. A scoreboard sidebar shows today's finishers. From `2026-11-19` on, offensive words are removed from the secret-word pool (see §5.4); they can still be guessed.
 - **Daily Hard** — a **second, independent** daily puzzle that uses the **full** 7-letter WGPO list (`WORDS`), including rare words excluded from the Common 5k list. The same offensive-word exclusion applies to its secret pool from `2026-11-19` on. Has its own leaderboard in a separate Firestore collection `daily_scores_wgpo`. Uses a different seed (`date + ':wgpo'`) and **is guaranteed to have a different common letter from the classic Daily on the same date** — the picker explicitly excludes the classic daily's letter from its alphabet search. (Internal identifier is `'wgpo'` everywhere — variant id, collection name, seed salt, DOM element ids, function names — to stay backward-compatible with existing data from when the mode was called "Daily WGPO". Only the display label changed.)
@@ -46,6 +46,7 @@ seven_game/
 ├── firestore.rules         # informational copy of recommended Firestore security rules (NOT auto-deployed)
 ├── words.js                # const WORDS = [...]   7-letter lexicon, ordered by usage freq
 ├── offensive-secrets.js    # words never chosen as Daily / Daily Hard secrets; still valid guesses
+├── game-day.js             # shared Pacific game-day clock (rolls at 1:00 AM America/Los_Angeles)
 ├── words8.js               # const WORDS8 = [...]  8-letter lexicon, ordered by usage freq
 ├── scrabble_ranks.js       # const SCRABBLE_RANKS = [...]  parallel array of "probability" ranks
 ├── scrabble_ranks8.js      # const SCRABBLE_RANKS8 = [...] parallel array for WORDS8
@@ -104,6 +105,7 @@ One page, one `<body>`. Major elements, in order:
    <script src="words.js?v=2"></script>
    <script src="scrabble_ranks.js?v=2"></script>
    <script src="offensive-secrets.js?v=2"></script>
+   <script src="game-day.js?v=2"></script>
    <script src="firebase-config.js?v=2"></script>
    <script src="script.js?v=2"></script>
    ```
@@ -189,8 +191,9 @@ let currentReplayDayIdx = -1;
 ### 5.3 Seeded RNG for daily puzzles
 
 - `mulberry32(seed)` — standard 32-bit PRNG returning `() => float in [0,1)`.
-- `getDailySeed()` — uses local date `YYYY-MM-DD`, runs it through the classic `hash = ((hash<<5) - hash) + charCode` reducer, returns an int.
-- `getTodayString()` returns the same `YYYY-MM-DD` string used above and as the Firestore `date` field.
+- The game day is **not** the viewer's local date. `game-day.js` (loaded by both `index.html` and `admin.html`) defines `gameDayString(now)` and `shiftGameDay(dateStr, deltaDays)`. `gameDayString` formats `now` in `America/Los_Angeles` and, when that wall-clock hour is before `01`, steps back one calendar day. So the worldwide reset is **1:00 AM Pacific**, including across PST/PDT. `getTodayString()` returns that `YYYY-MM-DD`. Admin `todayString()` calls `gameDayString` directly. The string is still the puzzle seed and the Firestore `date`; a given date still reconstructs the same puzzle.
+- `getDailySeed()` hashes `getTodayString()` via `seedForDateStr`.
+- While a Daily or Daily Hard session is open, `activeGameDate` is the day it was loaded for. Saves, live-guess logs, the leaderboard query, and score submit use that date, so a guess made as the clock passes 1:00 AM is still filed on the puzzle being played. `refreshIfGameDayRolled()` (every 30s, and when the tab becomes visible) saves that in-progress daily under `activeGameDate`, then reloads Daily, Daily Hard, or Past 7 onto the new game day. It waits if the nickname modal is open. Practice is not reloaded.
 
 ### 5.4 Word picking
 
@@ -386,7 +389,7 @@ Once a daily puzzle is complete the player can review their own solve move-by-mo
 
 ### 5.14 Past 7 mode & replay
 
-**Date selection.** `past7Dates()` returns 7 local-date strings going back from yesterday (not today) to 7 days ago, most recent first, in `YYYY-MM-DD` form.
+**Date selection.** `past7Dates()` returns the seven game days before `getTodayString()` (yesterday back through seven days ago), most recent first, via `shiftGameDay`. Those are Pacific game days, not the viewer's local dates.
 
 **Deterministic puzzle re-creation.** `seedForDateStr(dateStr)` re-implements the same date → seed hash used by `getDailySeed()` but parameterized by an arbitrary date string. `puzzleForDate(dateStr)` is a **pure** reimplementation of the daily picker that returns `{letter, secrets}` without touching any globals: seed `mulberry32`, shuffle the alphabet, pick the first letter whose 5k-Common filter has ≥50 candidates, then pick 7 words without replacement under the date's `minHamming` rule. This works because daily puzzles are always deterministic from the date.
 
@@ -596,6 +599,7 @@ To recreate this project from scratch:
    - `puzzleWgpoForDate` must pass the classic day's common letter as `excludeLetter` to `pickPuzzle`, guaranteeing the two daily variants never share a letter on the same date.
    - Secret words in a puzzle must pairwise differ in at least two positions (`minHamming = 2`), except daily dates before `PAIRWISE_HAMMING_FROM_DATE` (`2026-09-20`), which pass `minHamming = 0` so already-published puzzles reconstruct unchanged. `admin.js` must duplicate `hammingDistance`, `differsFromAllBy`, `minSecretHammingForDate`, and the updated `pickPuzzle` verbatim.
    - From `OFFENSIVE_SECRETS_FROM_DATE` (`2026-11-19`), Daily and Daily Hard pass `offensiveSecretsForDate(dateStr)` as `pickPuzzle`'s `excludeWords` so listed words are never secrets. They stay in `WORDS` and remain valid guesses. Earlier dates pass `null`. Practice does not pass the set. `admin.js` must call the same helper, and its `pickPuzzle` copy must honor `excludeWords`.
+   - `getTodayString()` and admin `todayString()` must both come from `gameDayString` in `game-day.js` (1:00 AM `America/Los_Angeles`). Past 7 dates are `shiftGameDay` steps back from that game day. Do not derive "today" from the viewer's local timezone.
 7. Create a Firebase project, copy the web config into `firebase-config.js`, and add **four** Firestore collections: `daily_scores` and `daily_scores_wgpo` (the two daily leaderboards) plus `live_guesses` and `live_guesses_wgpo` (the two per-variant live guess logs). Apply the rules in `firestore.rules` (or copy the snippets from §6.2 + §11). The two `daily_scores*` collections allow public `read` and schema-validated `create`; the two `live_guesses*` collections allow public `create` (so anonymous players can be logged) but restrict `read` to a single admin UID.
 8. Open `index.html` in a browser. No server is required for local play; to persist scores you need to host it somewhere that Firebase allows as an auth domain.
 9. (Optional) Set up the admin page (§11): in the Firebase console, enable Authentication → Google sign-in. Open `admin.html`, sign in once, copy the displayed UID into the `ADMIN_UID` constant in `admin.js` and into the two `request.auth.uid == '...'` checks in your Firestore rules, then redeploy the rules.
@@ -625,7 +629,7 @@ A separate, **private** dashboard for the puzzle owner. It is intentionally NOT 
 
 ### 11.1 Auth & gates
 
-`admin.html` loads `firebase-app-compat`, `firebase-auth-compat`, `firebase-firestore-compat`, then `words.js`, `firebase-config.js`, and `admin.js`. On `DOMContentLoaded`, `bootstrap()` calls `initFirebase()` (from `firebase-config.js`) and registers an `onAuthStateChanged` handler. There are four UI states, exactly one of which is visible at a time:
+`admin.html` loads `firebase-app-compat`, `firebase-auth-compat`, `firebase-firestore-compat`, then `words.js`, `offensive-secrets.js`, `game-day.js`, `firebase-config.js`, and `admin.js`. On `DOMContentLoaded`, `bootstrap()` calls `initFirebase()` (from `firebase-config.js`) and registers an `onAuthStateChanged` handler. There are four UI states, exactly one of which is visible at a time:
 
 - `#admin-signin-gate` — not signed in. Click the button to invoke `firebase.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider())`.
 - `#admin-setup-gate` — signed in, but `ADMIN_UID === '__SET_ME__'` in `admin.js`. Displays the user's UID and walks them through editing `admin.js` and `firestore.rules`.
@@ -638,7 +642,7 @@ The single source of truth for "am I the admin?" is the `ADMIN_UID` constant in 
 
 Three controls along the top:
 
-- `#admin-date` — `<input type="date">` defaulting to today, `max` clamped to today (since future dates have no data).
+- `#admin-date` — `<input type="date">` defaulting to the current Pacific game day (`todayString()` → `gameDayString`), `max` clamped to that day (a future game day has no data).
 - `.admin-variant-toggle` — two-button toggle (`#admin-variant-common` / `#admin-variant-wgpo`). Each click calls `switchVariant(v)` which updates `selectedVariant` and re-runs `loadDashboardData()`.
 - `#admin-export-lexicon` — fetches **both** `live_guesses` and `live_guesses_wgpo` collections in parallel, filters to `reject_reason == 'not_in_lexicon'`, sorts by date then by `client_timestamp`, and downloads a CSV with columns `date, variant, word, session_id, nickname, t_seconds, client_timestamp_iso`. The export is **all dates and both variants** in a single file regardless of the currently selected date — the date/variant pickers only affect the replay viewer below, not the export.
 
